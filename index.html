@@ -3,64 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地铁站 V9 | 最终稳定版</title>
+    <title>地铁站 V10 | 紧急修复版</title>
     <style>
-        /* 基础样式：防止黑屏，默认深蓝背景 */
-        body { margin: 0; overflow: hidden; background-color: #112; font-family: sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
-        #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 0; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: Arial, sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
+        
+        /* 加载提示 */
+        #loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #fff; font-size: 1.5rem; z-index: 200; pointer-events: none;
+        }
 
-        /* 启动遮罩 */
+        /* 错误提示区 */
+        #error-log {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(50,0,0,0.9); color: #f55; z-index: 999;
+            padding: 20px; display: none; white-space: pre-wrap; font-family: monospace;
+        }
+
+        #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; z-index: 100;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: #fff; transition: opacity 0.5s;
+            background: #111; z-index: 100;
+            display: none; /* 初始隐藏，等JS加载完再显示 */
+            flex-direction: column; justify-content: center; align-items: center;
+            color: #fff;
         }
+        
         #start-btn {
             padding: 20px 60px; font-size: 1.5rem; background: #0f0; color: #000;
             border: none; border-radius: 8px; font-weight: bold; cursor: pointer;
             box-shadow: 0 0 20px #0f0; margin-top: 20px;
         }
 
-        /* 准星 */
         #crosshair {
             position: absolute; top: 50%; left: 50%; width: 8px; height: 8px;
             background: rgba(255, 255, 255, 0.8); border-radius: 50%;
             transform: translate(-50%, -50%); pointer-events: none; z-index: 50;
-            transition: all 0.2s; border: 2px solid rgba(0,0,0,0.5);
+            border: 2px solid rgba(0,0,0,0.5);
         }
-        /* 准星激活状态 */
-        .active-crosshair { background: #f00 !important; width: 16px !important; height: 16px !important; border-color: #fff !important; }
+        .active-ch { background: #f00 !important; transform: translate(-50%, -50%) scale(1.5) !important; }
 
-        /* 提示信息 */
         #msg {
             position: absolute; top: 30%; width: 100%; text-align: center;
-            color: #ff0; text-shadow: 0 0 5px #000; font-size: 1.5rem;
+            color: #ff0; text-shadow: 0 0 5px #000; font-size: 1.2rem;
             pointer-events: none; z-index: 50; opacity: 0; transition: opacity 0.3s;
         }
 
-        /* --- 移动端专用 UI (默认隐藏) --- */
+        /* 移动端 UI */
         .mobile-ui { display: none; position: absolute; z-index: 60; }
-        
-        /* 摇杆区域 */
-        .joystick-area {
+        .stick-area {
             width: 140px; height: 140px; bottom: 40px;
             background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255,255,255,0.3);
             border-radius: 50%;
         }
         #stick-l { left: 30px; }
         #stick-r { right: 30px; }
-        
-        /* 摇杆头 */
         .knob {
             position: absolute; top: 50%; left: 50%; width: 50px; height: 50px;
             background: rgba(255, 255, 255, 0.6); border-radius: 50%;
             transform: translate(-50%, -50%); pointer-events: none;
         }
-
-        /* 互动按钮 (移动端专用) */
         #action-btn {
-            bottom: 180px; right: 40px; width: 80px; height: 80px;
+            bottom: 180px; right: 30px; width: 80px; height: 80px;
             background: rgba(0, 255, 255, 0.3); border: 2px solid #0ff; border-radius: 50%;
             display: none; justify-content: center; align-items: center; color: #fff; font-weight: bold;
         }
@@ -71,9 +76,12 @@
 </head>
 <body>
 
+    <div id="loading">正在连接资源服务器... (若卡住请刷新)</div>
+    <div id="error-log"></div>
+
     <div id="overlay">
-        <h1 style="color: #4af; text-shadow: 0 0 20px #4af;">STATION V9</h1>
-        <p>稳定版 | Stable Build</p>
+        <h1 style="color: #4af;">STATION V10</h1>
+        <p>CDN已修复 | Ready</p>
         <button id="start-btn">启动 / START</button>
     </div>
 
@@ -83,16 +91,26 @@
     <div id="pc-hint">WASD移动 | 鼠标看 | E键交互 | Shift跑</div>
 
     <!-- 移动端控件 -->
-    <div id="stick-l" class="mobile-ui joystick-area"><div class="knob" id="knob-l"></div></div>
-    <div id="stick-r" class="mobile-ui joystick-area"><div class="knob" id="knob-r"></div></div>
-    <div id="action-btn" class="mobile-ui">交互</div>
+    <div id="stick-l" class="mobile-ui stick-area"><div class="knob" id="knob-l"></div></div>
+    <div id="stick-r" class="mobile-ui stick-area"><div class="knob" id="knob-r"></div></div>
+    <div id="action-btn" class="mobile-ui">E</div>
 
-    <!-- 引入稳定的 ESM 模块 -->
+    <!-- 错误捕获 -->
+    <script>
+        window.onerror = function(msg, url, line) {
+            const el = document.getElementById('error-log');
+            el.style.display = 'block';
+            el.innerText += `Error: ${msg}\nLine: ${line}\nTry refreshing.\n`;
+            document.getElementById('loading').style.display = 'none';
+        };
+    </script>
+
+    <!-- 换回最稳的 unpkg 源 -->
     <script type="importmap">
         {
             "imports": {
-                "three": "https://esm.sh/three@0.160.0",
-                "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
             }
         }
     </script>
@@ -101,229 +119,267 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-        // --- 全局配置 ---
-        const CFG = {
-            speed: 10,
-            runSpeed: 20,
-            gravity: 30,
-            playerHeight: 1.6
-        };
+        // 资源加载完成，隐藏Loading，显示Start
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('overlay').style.display = 'flex';
 
-        // 变量
+        // --- 配置 ---
+        const CFG = { speed: 10, runSpeed: 20, gravity: 30, height: 1.6 };
+
         let camera, scene, renderer, controls;
         let isMobile = false;
         let lastTime = performance.now();
         
-        // 运动状态
+        // 状态
         const input = { x: 0, y: 0, run: false };
         const velocity = new THREE.Vector3();
-        const touchLook = { x: 0, y: 0 }; // 移动端视角偏移量
-
-        // 场景对象
-        const colliders = []; // 空气墙
+        const touchLook = { x: 0, y: 0 };
+        const colliders = [];
         let trainGroup, trainActive = false, trainTimer = 0;
-        let interactableObj = null; // 当前瞄准的对象
-
-        // 音频
+        let interactTarget = null;
         let audioCtx;
 
         init();
         animate();
 
         function init() {
-            // 1. 检测设备
-            isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            if (isMobile) {
-                document.querySelectorAll('.mobile-ui').forEach(el => el.style.display = 'flex');
-                document.getElementById('pc-hint').style.display = 'none';
-            }
+            try {
+                // 检测移动端
+                isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                if (isMobile) {
+                    document.querySelectorAll('.mobile-ui').forEach(e => e.style.display = 'flex');
+                    document.getElementById('pc-hint').style.display = 'none';
+                }
 
-            // 2. 渲染器
-            const container = document.getElementById('canvas-container');
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            renderer.shadowMap.enabled = true;
-            container.appendChild(renderer.domElement);
+                // 渲染器
+                const container = document.getElementById('canvas-container');
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                renderer.shadowMap.enabled = true;
+                container.appendChild(renderer.domElement);
 
-            // 3. 场景
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x111118); // 深蓝夜色
-            scene.fog = new THREE.FogExp2(0x111118, 0.02);
+                // 场景
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x111118);
+                scene.fog = new THREE.FogExp2(0x111118, 0.02);
 
-            // 4. 相机
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
-            camera.position.set(5, 2, 0); // 站在站台中间
-            camera.rotation.order = 'YXZ'; // 关键：防止万向节死锁
+                // 相机
+                camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 500);
+                camera.position.set(5, 2, 0);
+                camera.rotation.order = 'YXZ';
 
-            // 5. 灯光 (确保够亮)
-            const amb = new THREE.AmbientLight(0xffffff, 0.8);
-            scene.add(amb);
-            const dir = new THREE.DirectionalLight(0xaaddff, 0.8);
-            dir.position.set(20, 50, 20);
-            dir.castShadow = true;
-            scene.add(dir);
+                // 灯光
+                const amb = new THREE.AmbientLight(0xffffff, 0.8);
+                scene.add(amb);
+                const dir = new THREE.DirectionalLight(0xaaccff, 0.8);
+                dir.position.set(20, 50, 20);
+                dir.castShadow = true;
+                scene.add(dir);
 
-            // 6. 控制器
-            if (!isMobile) {
-                controls = new PointerLockControls(camera, document.body);
-            }
+                // 控制器
+                if (!isMobile) controls = new PointerLockControls(camera, document.body);
 
-            // 7. 启动逻辑
-            const btn = document.getElementById('start-btn');
-            const overlay = document.getElementById('overlay');
-            btn.addEventListener('click', async () => {
-                overlay.style.opacity = 0;
-                setTimeout(() => overlay.style.display = 'none', 500);
-                
-                await initAudio(); // 启动音频
-                
-                if (!isMobile) controls.lock();
-                
-                // 启动列车循环
-                triggerTrain();
-                setInterval(triggerTrain, 15000);
-            });
-
-            if (!isMobile) {
-                controls.addEventListener('unlock', () => {
-                    overlay.style.display = 'flex';
-                    overlay.style.opacity = 1;
-                    btn.innerText = "继续 (RESUME)";
+                // UI事件
+                const btn = document.getElementById('start-btn');
+                const overlay = document.getElementById('overlay');
+                btn.addEventListener('click', async () => {
+                    overlay.style.display = 'none';
+                    await initAudio();
+                    if (!isMobile) controls.lock();
+                    triggerTrain();
+                    setInterval(triggerTrain, 15000);
                 });
+
+                if (!isMobile) {
+                    controls.addEventListener('unlock', () => {
+                        overlay.style.display = 'flex';
+                    });
+                }
+
+                // 构建世界
+                buildWorld();
+                setupInput();
+
+                window.addEventListener('resize', onResize);
+
+            } catch (e) {
+                document.getElementById('error-log').innerText += e.message;
+                document.getElementById('error-log').style.display = 'block';
             }
-
-            // 8. 构建世界
-            buildWorld();
-            setupInputs();
-
-            window.addEventListener('resize', onResize);
         }
 
-        // --- 场景构建 (纯几何体，无纹理，加载快) ---
         function buildWorld() {
-            const matFloor = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
-            const matWall = new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 0.5 });
-            const matTrack = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const matGrey = new THREE.MeshStandardMaterial({color:0x666677, roughness:0.5});
+            const matDark = new THREE.MeshStandardMaterial({color:0x222222});
 
-            // 1. 站台 (x: 0~20)
-            const floor = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 300), matFloor);
-            floor.position.set(10, -0.5, 0);
-            floor.receiveShadow = true;
-            scene.add(floor);
+            // 地板
+            const f = new THREE.Mesh(new THREE.BoxGeometry(20,1,300), matGrey);
+            f.position.set(10,-0.5,0); f.receiveShadow=true; scene.add(f);
 
-            // 2. 轨道 (x: -20~0)
-            const track = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 300), matTrack);
-            track.position.set(-10, -3.5, 0);
-            scene.add(track);
+            // 轨道
+            const t = new THREE.Mesh(new THREE.BoxGeometry(20,1,300), matDark);
+            t.position.set(-10,-3.5,0); scene.add(t);
 
-            // 3. 后墙
-            const wall = new THREE.Mesh(new THREE.BoxGeometry(2, 20, 300), matWall);
-            wall.position.set(21, 10, 0);
-            scene.add(wall);
+            // 墙
+            const w = new THREE.Mesh(new THREE.BoxGeometry(2,20,300), matGrey);
+            w.position.set(21,10,0); scene.add(w);
 
-            // 4. 柱子
-            const colGeo = new THREE.BoxGeometry(1.5, 12, 1.5);
+            // 柱子
+            const cGeo = new THREE.BoxGeometry(1.5,12,1.5);
             for(let z=-80; z<=80; z+=20) {
-                const c = new THREE.Mesh(colGeo, matWall);
-                c.position.set(5, 6, z);
-                c.castShadow = true;
-                scene.add(c);
-                // 添加柱子碰撞
-                const box = new THREE.Box3().setFromObject(c);
-                colliders.push(box);
-                
-                // 灯
-                const l = new THREE.PointLight(0xccddff, 0.8, 15);
-                l.position.set(5, 8, z);
-                scene.add(l);
+                const c = new THREE.Mesh(cGeo, matGrey);
+                c.position.set(5,6,z); c.castShadow=true; scene.add(c);
+                colliders.push(new THREE.Box3().setFromObject(c));
+                const l = new THREE.PointLight(0xaaddff, 0.8, 15);
+                l.position.set(5,8,z); scene.add(l);
             }
 
-            // 5. 售货机 (可交互)
+            // 售货机
             const vm = new THREE.Group();
-            const vmBody = new THREE.Mesh(new THREE.BoxGeometry(2,4,2), new THREE.MeshStandardMaterial({color:0x222}));
-            vmBody.position.y = 2;
-            vm.add(vmBody);
-            const vmScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.5,1), new THREE.MeshBasicMaterial({color:0x00ff00}));
-            vmScreen.position.set(0,2.5,-1.01); vmScreen.rotation.y = Math.PI;
-            vm.add(vmScreen);
-            
-            vm.position.set(18, 0, 10);
-            vm.name = "vending_machine"; // 标记名字用于交互
-            scene.add(vm);
+            const vb = new THREE.Mesh(new THREE.BoxGeometry(2,4,2), new THREE.MeshStandardMaterial({color:0x333}));
+            vb.position.y=2; vm.add(vb);
+            const vs = new THREE.Mesh(new THREE.PlaneGeometry(1.5,1), new THREE.MeshBasicMaterial({color:0x00ff00}));
+            vs.position.set(0,2.5,-1.01); vs.rotation.y=Math.PI; vm.add(vs);
+            vm.position.set(18,0,10); vm.name="vm"; scene.add(vm);
+            colliders.push(new THREE.Box3().setFromObject(vm));
 
-            // 售货机碰撞
-            const vmBox = new THREE.Box3().setFromObject(vm);
-            colliders.push(vmBox);
+            // 空气墙
+            colliders.push(new THREE.Box3(new THREE.Vector3(20,-50,-200), new THREE.Vector3(25,100,200))); // 后
+            colliders.push(new THREE.Box3(new THREE.Vector3(-50,-50,-200), new THREE.Vector3(-15,100,200))); // 前
+            colliders.push(new THREE.Box3(new THREE.Vector3(-50,-50,-152), new THREE.Vector3(50,100,-150))); // 左
+            colliders.push(new THREE.Box3(new THREE.Vector3(-50,-50,150), new THREE.Vector3(50,100,152))); // 右
 
-            // 6. 边界空气墙 (死死挡住)
-            // 后方
-            colliders.push(new THREE.Box3(new THREE.Vector3(20, -10, -200), new THREE.Vector3(22, 50, 200)));
-            // 前方 (轨道深处)
-            colliders.push(new THREE.Box3(new THREE.Vector3(-50, -10, -200), new THREE.Vector3(-15, 50, 200)));
-            // 左边界
-            colliders.push(new THREE.Box3(new THREE.Vector3(-50, -10, -150), new THREE.Vector3(50, 50, -152)));
-            // 右边界
-            colliders.push(new THREE.Box3(new THREE.Vector3(-50, -10, 150), new THREE.Vector3(50, 50, 152)));
-
-            // 7. 列车
+            // 列车
             trainGroup = new THREE.Group();
-            const tBody = new THREE.Mesh(new THREE.BoxGeometry(4.2, 4.5, 80), new THREE.MeshStandardMaterial({color:0xcccccc}));
-            tBody.position.y = 2.25;
-            trainGroup.add(tBody);
-            const tLight = new THREE.SpotLight(0xffffff, 50, 100);
-            tLight.position.set(0,2,41); tLight.target.position.set(0,0,100);
-            trainGroup.add(tLight); trainGroup.add(tLight.target);
-            
-            trainGroup.position.set(-6, -3, -400);
-            scene.add(trainGroup);
+            const tb = new THREE.Mesh(new THREE.BoxGeometry(4.2,4.5,80), new THREE.MeshStandardMaterial({color:0xcccccc}));
+            tb.position.y=2.25; trainGroup.add(tb);
+            const tl = new THREE.SpotLight(0xffffff,100,150);
+            tl.position.set(0,2,41); tl.target.position.set(0,0,100);
+            trainGroup.add(tl); trainGroup.add(tl.target);
+            trainGroup.position.set(-6,-3,-400); scene.add(trainGroup);
         }
 
-        // --- 输入系统 ---
-        function setupInputs() {
-            // PC
+        function setupInput() {
             document.addEventListener('keydown', e => {
-                if(e.code==='KeyW') input.y = 1;
-                if(e.code==='KeyS') input.y = -1;
-                if(e.code==='KeyA') input.x = -1;
-                if(e.code==='KeyD') input.x = 1;
-                if(e.code==='ShiftLeft') input.run = true;
-                if(e.code==='KeyE') tryInteract();
+                if(e.code==='KeyW') input.y=1; if(e.code==='KeyS') input.y=-1;
+                if(e.code==='KeyA') input.x=-1; if(e.code==='KeyD') input.x=1;
+                if(e.code==='ShiftLeft') input.run=true;
+                if(e.code==='KeyE') doInteract();
             });
             document.addEventListener('keyup', e => {
-                if(e.code==='KeyW'||e.code==='KeyS') input.y = 0;
-                if(e.code==='KeyA'||e.code==='KeyD') input.x = 0;
-                if(e.code==='ShiftLeft') input.run = false;
+                if(['KeyW','KeyS'].includes(e.code)) input.y=0;
+                if(['KeyA','KeyD'].includes(e.code)) input.x=0;
+                if(e.code==='ShiftLeft') input.run=false;
             });
-            document.addEventListener('mousedown', tryInteract); // 鼠标左键也可交互
+            document.addEventListener('mousedown', doInteract);
 
-            // Mobile Joysticks
-            if(isMobile) {
-                // 左摇杆：移动
-                setupJoystick('stick-l', 'knob-l', (x, y) => {
-                    input.x = x; input.y = -y; // 摇杆向上是y负，对应前进
-                });
-                // 右摇杆：视角
-                setupJoystick('stick-r', 'knob-r', (x, y) => {
-                    touchLook.x = x * 2.0; // 灵敏度
-                    touchLook.y = y * 2.0;
-                });
-                // 交互按钮
-                const actBtn = document.getElementById('action-btn');
-                actBtn.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    tryInteract();
-                    actBtn.style.background = "rgba(0, 255, 255, 0.6)";
-                });
-                actBtn.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    actBtn.style.background = "rgba(0, 255, 255, 0.3)";
-                });
+            if (isMobile) {
+                // 摇杆逻辑
+                const bindStick = (id, knobId, cb) => {
+                    const zone = document.getElementById(id);
+                    const knob = document.getElementById(knobId);
+                    const rect = zone.getBoundingClientRect();
+                    const c = {x: rect.left+rect.width/2, y: rect.top+rect.height/2};
+                    
+                    zone.addEventListener('touchmove', e => {
+                        e.preventDefault();
+                        const t = e.targetTouches[0];
+                        let dx = t.clientX - c.x, dy = t.clientY - c.y;
+                        const d = Math.sqrt(dx*dx+dy*dy), max = 35;
+                        if(d>max) { dx*=max/d; dy*=max/d; }
+                        knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                        cb(dx/max, dy/max);
+                    }, {passive:false});
+                    zone.addEventListener('touchend', e => {
+                        e.preventDefault();
+                        knob.style.transform = `translate(-50%, -50%)`;
+                        cb(0,0);
+                    }, {passive:false});
+                };
+
+                bindStick('stick-l', 'knob-l', (x,y) => { input.x=x; input.y=-y; });
+                bindStick('stick-r', 'knob-r', (x,y) => { touchLook.x=x; touchLook.y=y; });
+                
+                const ab = document.getElementById('action-btn');
+                ab.addEventListener('touchstart', e => { e.preventDefault(); doInteract(); ab.style.background="rgba(0,255,255,0.6)"; });
+                ab.addEventListener('touchend', e => { ab.style.background="rgba(0,255,255,0.3)"; });
             }
         }
 
-        function setupJoystick(areaId, knobId, callback) {
-            const area = document.getElementById(areaId);
-            const knob = document.getElementById(knobId);
-            const rect = area.getBoundingClientRect();
-            const center = { x: rect.
+        function updatePhysics(dt) {
+            velocity.x -= velocity.x * 10 * dt;
+            velocity.z -= velocity.z * 10 * dt;
+            velocity.y -= CFG.gravity * dt;
+
+            const spd = input.run ? CFG.runSpeed : CFG.speed;
+            const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y=0; fwd.normalize();
+            const right = new THREE.Vector3().crossVectors(fwd, camera.up).normalize();
+
+            if(input.y) { velocity.x += fwd.x*spd*input.y*dt*10; velocity.z += fwd.z*spd*input.y*dt*10; }
+            if(input.x) { velocity.x += right.x*spd*input.x*dt*10; velocity.z += right.z*spd*input.x*dt*10; }
+
+            if(isMobile) {
+                camera.rotation.y -= touchLook.x * 2 * dt;
+                camera.rotation.x -= touchLook.y * 2 * dt;
+                camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
+            }
+
+            // 移动 & 碰撞
+            const moveAxis = (ax, val) => {
+                camera.position[ax] += val;
+                if(checkCol()) camera.position[ax] -= val;
+            };
+            moveAxis('x', velocity.x*dt);
+            moveAxis('z', velocity.z*dt);
+            camera.position.y += velocity.y * dt;
+
+            // 地面
+            const ground = camera.position.x > 0 ? 0 : -3;
+            if(camera.position.y < ground + CFG.height) {
+                camera.position.y = ground + CFG.height; velocity.y=0;
+            }
+            if(camera.position.y < -50) camera.position.set(5,2,0);
+
+            // 准星检测
+            const ray = new THREE.Raycaster();
+            ray.setFromCamera(new THREE.Vector2(0,0), camera);
+            const hits = ray.intersectObjects(scene.children, true);
+            const ch = document.getElementById('crosshair');
+            interactTarget = null;
+            if(hits.length>0 && hits[0].distance<5) {
+                let p = hits[0].object;
+                while(p.parent!==scene) p = p.parent;
+                if(p.name==='vm') {
+                    interactTarget = p;
+                    ch.classList.add('active-ch');
+                } else ch.classList.remove('active-ch');
+            } else ch.classList.remove('active-ch');
+        }
+
+        function checkCol() {
+            const b = new THREE.Box3();
+            const r = 0.5;
+            b.min.set(camera.position.x-r, camera.position.y-1.5, camera.position.z-r);
+            b.max.set(camera.position.x+r, camera.position.y+0.2, camera.position.z+r);
+            for(let c of colliders) if(c.intersectsBox(b)) return true;
+            return false;
+        }
+
+        function doInteract() {
+            if(interactTarget) {
+                const el = document.getElementById('msg');
+                el.innerText = "库存不足 (OUT OF STOCK)";
+                el.style.opacity = 1;
+                setTimeout(()=>el.style.opacity=0, 1500);
+                playBeep();
+            }
+        }
+
+        function triggerTrain() {
+            if(trainActive) return;
+            trainActive=true; trainTimer=0;
+            playNoise();
+        }
+
+        fun
