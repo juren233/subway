@@ -2,69 +2,78 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>深夜地铁站 | 终极重制版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>地铁站 V7.0 | 全平台适配版</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Consolas', monospace; user-select: none; }
+        body { margin: 0; overflow: hidden; background: #1a1a20; font-family: sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
         
-        /* 胶片颗粒滤镜，增加质感 */
-        #grain {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
-            pointer-events: none; z-index: 5;
-        }
+        #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
 
+        /* UI 层 */
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000;
+            background: rgba(20, 25, 30, 0.95);
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: #ddd; z-index: 100; transition: opacity 0.5s;
+            color: #fff; z-index: 100; transition: opacity 0.3s;
         }
         
         button {
-            padding: 20px 60px; font-size: 1.2rem; background: transparent; color: #fff; 
-            border: 1px solid #fff; cursor: pointer; letter-spacing: 4px;
-            transition: all 0.3s; margin-top: 20px;
+            padding: 15px 40px; font-size: 1.2rem; background: #4af; color: #000; 
+            border: none; border-radius: 30px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 0 20px rgba(68, 170, 255, 0.4); margin-top: 20px;
         }
-        button:hover { background: #fff; color: #000; box-shadow: 0 0 30px rgba(255,255,255,0.3); }
-
-        #hud {
-            position: absolute; bottom: 30px; left: 40px; color: rgba(255,255,255,0.5);
-            pointer-events: none; font-size: 0.8rem; z-index: 10;
-        }
-        .key { border: 1px solid #666; padding: 4px 8px; margin: 0 2px; color: #fff; }
 
         #crosshair {
-            position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
-            background: rgba(255, 255, 255, 0.5); border-radius: 50%; 
-            transform: translate(-50%, -50%); z-index: 10;
+            position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
+            background: rgba(255, 255, 255, 0.8); border-radius: 50%; 
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 10;
+            box-shadow: 0 0 4px #000;
         }
+
+        #msg {
+            position: absolute; top: 20%; width: 100%; text-align: center; color: #ff0; 
+            text-shadow: 0 0 5px #000; font-size: 1.2rem; pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 20;
+        }
+
+        /* 移动端摇杆 UI */
+        .joystick-zone {
+            position: absolute; bottom: 40px; width: 120px; height: 120px;
+            background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 50%; display: none; /* 默认隐藏，JS检测到移动端开启 */
+            touch-action: none; z-index: 50;
+        }
+        #stick-left { left: 40px; }
+        #stick-right { right: 40px; }
         
-        #interact-msg {
-            position: absolute; top: 60%; width: 100%; text-align: center;
-            color: #0ff; text-shadow: 0 0 10px #0ff; opacity: 0; transition: opacity 0.3s;
-            font-size: 1.2rem; z-index: 10; pointer-events: none;
+        .knob {
+            position: absolute; top: 50%; left: 50%; width: 50px; height: 50px;
+            background: rgba(255, 255, 255, 0.5); border-radius: 50%;
+            transform: translate(-50%, -50%); pointer-events: none;
+        }
+
+        #pc-hint {
+            position: absolute; bottom: 20px; left: 20px; color: #aaa; pointer-events: none; font-size: 0.9rem;
         }
     </style>
 </head>
 <body>
-    <!-- 视觉滤镜层 -->
-    <div id="grain"></div>
 
     <div id="overlay">
-        <h1 style="font-weight: 100; letter-spacing: 10px; text-shadow: 0 0 20px #fff;">STATION_V6</h1>
-        <div style="height: 1px; width: 200px; background: #333; margin: 20px 0;"></div>
-        <p style="color: #666; font-size: 0.9rem;">PROCEDURAL TEXTURES • VOLUMETRIC AUDIO • PHYSICS</p>
-        <button id="start-btn">INITIALIZE</button>
+        <h2 style="color: #4af;">STATION V7.0</h2>
+        <p style="color: #bbb;">亮度提升 • 移动端适配 • 强力物理</p>
+        <button id="start-btn">开始体验 / START</button>
     </div>
 
+    <div id="canvas-container"></div>
     <div id="crosshair"></div>
-    <div id="interact-msg"></div>
-    <div id="hud">
-        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> MOVE &nbsp;
-        <span class="key">SHIFT</span> RUN &nbsp;
-        <span class="key">SPACE</span> JUMP &nbsp;
-        <span class="key">L-CLICK</span> INTERACT
-    </div>
+    <div id="msg"></div>
+    
+    <!-- PC提示 -->
+    <div id="pc-hint">WASD移动 | Shift加速 | 鼠标交互</div>
+
+    <!-- 移动端摇杆 -->
+    <div id="stick-left" class="joystick-zone"><div class="knob" id="knob-l"></div></div>
+    <div id="stick-right" class="joystick-zone"><div class="knob" id="knob-r"></div></div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
@@ -77,358 +86,434 @@
         // --- 全局配置 ---
         const CONFIG = {
             gravity: 30.0,
-            speed: 10.0,
-            runSpeed: 22.0,
-            jumpForce: 12.0,
-            height: 1.7,
-            radius: 0.5
+            walkSpeed: 12.0,
+            runSpeed: 25.0,
+            lookSensitivityMobile: 2.0,
+            playerHeight: 1.6,
+            playerRadius: 0.5
         };
 
-        // --- 变量 ---
         let camera, scene, renderer, controls;
+        let isMobile = false;
         let lastTime = performance.now();
-        let velocity = new THREE.Vector3();
-        let input = { w:false, s:false, a:false, d:false, shift:false, space:false };
-        let canJump = false;
         
-        // 场景对象
+        // 输入状态
+        const input = { x: 0, y: 0, run: false }; // x,y 用于移动向量 (-1 to 1)
+        const touchLook = { x: 0, y: 0 }; // 用于旋转视角
+        
+        // 物理状态
+        const velocity = new THREE.Vector3();
+        let canJump = false;
         const colliders = [];
-        let trainGroup, trainBody;
+
+        // 场景对象
+        let trainGroup, trainBodyMesh;
         let trainActive = false, trainTimer = 0;
         const trainBox = new THREE.Box3();
-        let vendingMachineLight;
+        let vmLight;
 
         // 音频
         let audioCtx, masterGain;
-        let ambientNodes = [];
-
-        // 纹理缓存
-        const textureCache = {};
 
         init();
         animate();
 
-        // --- 核心初始化 ---
         function init() {
-            // 1. 渲染器配置 (开启高精度)
+            // 0. 检测平台
+            isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if(isMobile) {
+                document.getElementById('pc-hint').style.display = 'none';
+                document.getElementById('stick-left').style.display = 'block';
+                document.getElementById('stick-right').style.display = 'block';
+            }
+
+            // 1. 渲染器 (高亮度设置)
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 柔和阴影
-            document.body.appendChild(renderer.domElement);
+            // 开启物理光照修正
+            renderer.useLegacyLights = false; 
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.2; // 全局曝光提升，解决"太黑"
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            // 2. 场景与相机
+            // 2. 场景 (颜色调亮)
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x050508);
-            scene.fog = new THREE.FogExp2(0x050508, 0.025); // 浓雾
+            scene.background = new THREE.Color(0x222228); // 深蓝灰背景，不再死黑
+            scene.fog = new THREE.FogExp2(0x222228, 0.015); // 雾气变淡
 
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 500);
-            camera.position.set(8, 2, 0);
+            // 3. 相机
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
+            camera.position.set(10, 2, 0);
+            // 修正相机旋转顺序，方便手机触摸控制
+            camera.rotation.order = 'YXZ'; 
 
-            // 3. 控制器
-            controls = new PointerLockControls(camera, document.body);
+            // 4. 灯光 (大幅增强)
+            const ambient = new THREE.AmbientLight(0xffffff, 1.5); // 强环境光
+            scene.add(ambient);
             
-            // UI绑定
+            const dirLight = new THREE.DirectionalLight(0xffeedd, 1.0);
+            dirLight.position.set(50, 100, 50);
+            dirLight.castShadow = true;
+            dirLight.shadow.bias = -0.0001;
+            scene.add(dirLight);
+
+            // 5. 交互控制器 (PC使用PointerLock，手机自定义)
+            if (!isMobile) {
+                controls = new PointerLockControls(camera, document.body);
+            }
+
             const btn = document.getElementById('start-btn');
             const overlay = document.getElementById('overlay');
+            
             btn.addEventListener('click', async () => {
                 overlay.style.opacity = 0;
-                setTimeout(() => overlay.style.display = 'none', 500);
-                controls.lock();
+                setTimeout(() => overlay.style.display = 'none', 300);
+                
                 await initAudio();
-                startAmbientLayers();
-                setInterval(triggerTrain, 18000); // 18秒一班车
-            });
-            controls.addEventListener('unlock', () => {
-                overlay.style.display = 'flex';
-                overlay.style.opacity = 1;
-                btn.innerText = "RESUME";
+                startLoop();
+                setInterval(triggerTrain, 12000);
+
+                if (!isMobile) {
+                    controls.lock();
+                } else {
+                    // 手机端全屏
+                    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+                }
             });
 
-            // 4. 输入监听
-            document.addEventListener('keydown', (e) => onKey(e, true));
-            document.addEventListener('keyup', (e) => onKey(e, false));
-            document.addEventListener('click', onInteract);
+            if(!isMobile) {
+                controls.addEventListener('unlock', () => {
+                    overlay.style.display = 'flex';
+                    overlay.style.opacity = 1;
+                });
+            }
 
-            // 5. 生成纹理并构建世界
-            generateTextures();
-            buildWorld();
+            // 6. 输入监听
+            setupInputs();
+
+            // 7. 构建场景
+            buildLevel();
 
             window.addEventListener('resize', onResize);
         }
 
-        // --- 程序化纹理生成 (不使用图片，纯代码生成) ---
-        function generateTextures() {
-            // 1. 水泥噪点纹理
-            const canvas = document.createElement('canvas');
-            canvas.width = 512; canvas.height = 512;
-            const ctx = canvas.getContext('2d');
-            
-            // 底色
-            ctx.fillStyle = '#444444';
-            ctx.fillRect(0,0,512,512);
-            
-            // 噪点
-            for(let i=0; i<50000; i++) {
-                ctx.fillStyle = Math.random() > 0.5 ? '#555' : '#333';
-                ctx.globalAlpha = 0.2;
-                ctx.fillRect(Math.random()*512, Math.random()*512, 2, 2);
-            }
-            
-            // 污渍
-            for(let i=0; i<50; i++) {
-                const x = Math.random()*512;
-                const y = Math.random()*512;
-                const r = Math.random()*50 + 10;
-                const grd = ctx.createRadialGradient(x,y,0,x,y,r);
-                grd.addColorStop(0, "rgba(0,0,0,0.3)");
-                grd.addColorStop(1, "rgba(0,0,0,0)");
-                ctx.fillStyle = grd;
-                ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-            }
+        // --- 输入系统 (PC & Mobile 统一) ---
+        function setupInputs() {
+            // PC 键盘
+            document.addEventListener('keydown', (e) => {
+                switch(e.code) {
+                    case 'KeyW': input.y = 1; break;
+                    case 'KeyS': input.y = -1; break;
+                    case 'KeyA': input.x = -1; break;
+                    case 'KeyD': input.x = 1; break;
+                    case 'ShiftLeft': input.run = true; break;
+                    case 'Space': if(canJump) velocity.y = CONFIG.gravity * 0.4; break;
+                }
+            });
+            document.addEventListener('keyup', (e) => {
+                switch(e.code) {
+                    case 'KeyW': if(input.y===1) input.y=0; break;
+                    case 'KeyS': if(input.y===-1) input.y=0; break;
+                    case 'KeyA': if(input.x===-1) input.x=0; break;
+                    case 'KeyD': if(input.x===1) input.x=0; break;
+                    case 'ShiftLeft': input.run = false; break;
+                }
+            });
+            document.addEventListener('click', onInteract);
 
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            textureCache.concrete = tex;
-
-            // 2. 金属拉丝纹理 (用于列车)
-            const c2 = document.createElement('canvas');
-            c2.width = 512; c2.height = 512;
-            const ctx2 = c2.getContext('2d');
-            ctx2.fillStyle = '#8899aa';
-            ctx2.fillRect(0,0,512,512);
-            ctx2.globalAlpha = 0.1;
-            ctx2.fillStyle = '#fff';
-            for(let i=0; i<1000; i++) {
-                const y = Math.random()*512;
-                ctx2.fillRect(0, y, 512, 1); // 横向拉丝
+            // 移动端 触摸摇杆
+            if(isMobile) {
+                setupJoystick('stick-left', 'knob-l', (x, y) => {
+                    input.x = x; input.y = -y; // 摇杆向上是y-，我们需要前进
+                });
+                setupJoystick('stick-right', 'knob-r', (x, y) => {
+                    touchLook.x = x * CONFIG.lookSensitivityMobile;
+                    touchLook.y = y * CONFIG.lookSensitivityMobile;
+                });
+                
+                // 手机跳跃：点击屏幕上半部分？或者简单点，双指点击屏幕
+                document.addEventListener('touchstart', (e) => {
+                    if(e.touches.length > 1 && canJump) velocity.y = CONFIG.gravity * 0.4;
+                    // 手机交互检测
+                    if(e.target.id === 'canvas-container' || e.target.tagName === 'CANVAS') {
+                         onInteract();
+                    }
+                }, {passive: false});
             }
-            const texMetal = new THREE.CanvasTexture(c2);
-            textureCache.metal = texMetal;
+        }
+
+        function setupJoystick(zoneId, knobId, callback) {
+            const zone = document.getElementById(zoneId);
+            const knob = document.getElementById(knobId);
+            const rect = zone.getBoundingClientRect();
+            const center = { x: rect.width/2, y: rect.height/2 };
+            let touchId = null;
+
+            zone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                touchId = touch.identifier;
+                updateKnob(touch.clientX, touch.clientY);
+            });
+
+            zone.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if(e.changedTouches[i].identifier === touchId) {
+                        updateKnob(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+                        break;
+                    }
+                }
+            });
+
+            zone.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                knob.style.transform = `translate(-50%, -50%)`;
+                callback(0, 0); // Reset
+            });
+
+            function updateKnob(clientX, clientY) {
+                // 重新获取rect防止滚动
+                const zoneRect = zone.getBoundingClientRect();
+                const centerX = zoneRect.left + zoneRect.width/2;
+                const centerY = zoneRect.top + zoneRect.height/2;
+                
+                let dx = clientX - centerX;
+                let dy = clientY - centerY;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                const maxDist = zoneRect.width/2 - 25; // 25 is half knob size
+
+                if (dist > maxDist) {
+                    const ratio = maxDist / dist;
+                    dx *= ratio;
+                    dy *= ratio;
+                }
+
+                knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                
+                // Normalize -1 to 1
+                callback(dx / maxDist, dy / maxDist);
+            }
         }
 
         // --- 场景构建 ---
-        function buildWorld() {
-            // 材质定义
-            const matConcrete = new THREE.MeshStandardMaterial({ 
-                map: textureCache.concrete, 
-                roughness: 0.9, 
-                bumpMap: textureCache.concrete, bumpScale: 0.02 
-            });
-            const matMetal = new THREE.MeshStandardMaterial({ 
-                map: textureCache.metal, 
-                roughness: 0.4, metalness: 0.6 
-            });
-            const matDark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1 });
+        function generateTexture() {
+            // 生成亮灰色的水泥纹理
+            const c = document.createElement('canvas');
+            c.width = 256; c.height = 256;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#888899'; // 亮底色
+            ctx.fillRect(0,0,256,256);
+            for(let i=0; i<5000; i++) {
+                ctx.fillStyle = Math.random()>0.5 ? '#999' : '#777';
+                ctx.fillRect(Math.random()*256, Math.random()*256, 2, 2);
+            }
+            const t = new THREE.CanvasTexture(c);
+            t.wrapS = t.wrapT = THREE.RepeatWrapping;
+            t.repeat.set(10, 10);
+            return t;
+        }
 
-            // 1. 站台
-            const platform = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 200), matConcrete);
-            platform.position.set(10, -0.5, 0);
-            platform.receiveShadow = true;
-            textureCache.concrete.repeat.set(4, 40); // 纹理重复
-            scene.add(platform);
+        function buildLevel() {
+            const tex = generateTexture();
+            const matFloor = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 });
+            const matWall = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.5 }); // 亮墙壁
 
-            // 2. 轨道床
-            const track = new THREE.Mesh(new THREE.BoxGeometry(30, 1, 200), matDark);
+            // 1. 地板
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 300), matFloor);
+            floor.position.set(10, -0.5, 0);
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // 2. 轨道
+            const track = new THREE.Mesh(new THREE.BoxGeometry(30, 1, 300), new THREE.MeshStandardMaterial({color: 0x111}));
             track.position.set(-15, -3.5, 0);
             scene.add(track);
-            
-            // 轨道枕木细节
-            for(let z=-90; z<90; z+=2) {
-                const sleeper = new THREE.Mesh(new THREE.BoxGeometry(10, 0.2, 0.5), matConcrete);
-                sleeper.position.set(-15, -2.9, z);
-                scene.add(sleeper);
-            }
 
-            // 3. 墙壁
-            const backWall = new THREE.Mesh(new THREE.BoxGeometry(2, 20, 200), matConcrete);
-            backWall.position.set(21, 10, 0);
-            backWall.castShadow = true;
-            scene.add(backWall);
-            colliders.push(new THREE.Box3().setFromObject(backWall));
+            // 3. 墙壁 & 碰撞体
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(2, 20, 300), matWall);
+            wall.position.set(21, 10, 0);
+            wall.castShadow = true;
+            scene.add(wall);
+            colliders.push(new THREE.Box3().setFromObject(wall)); // 后墙
 
-            // 隐形墙
-            colliders.push(new THREE.Box3(new THREE.Vector3(-50,-50,-102), new THREE.Vector3(50,50,-100)));
-            colliders.push(new THREE.Box3(new THREE.Vector3(-50,-50,100), new THREE.Vector3(50,50,102)));
-            colliders.push(new THREE.Box3(new THREE.Vector3(-35,-50,-100), new THREE.Vector3(-30,50,100)));
+            // 边界空气墙
+            colliders.push(new THREE.Box3(new THREE.Vector3(-100,-100,-152), new THREE.Vector3(100,100,-150)));
+            colliders.push(new THREE.Box3(new THREE.Vector3(-100,-100,150), new THREE.Vector3(100,100,152)));
+            colliders.push(new THREE.Box3(new THREE.Vector3(-40,-100,-200), new THREE.Vector3(-30,100,200))); // 轨道深处墙
 
-            // 4. 柱子 (带遮挡)
+            // 4. 柱子
             const colGeo = new THREE.BoxGeometry(1.5, 12, 1.5);
-            for(let z=-80; z<=80; z+=20) {
-                const col = new THREE.Mesh(colGeo, matConcrete);
-                col.position.set(5, 6, z);
-                col.castShadow = true;
-                col.receiveShadow = true;
-                scene.add(col);
-                colliders.push(new THREE.Box3().setFromObject(col));
+            for(let z=-100; z<=100; z+=25) {
+                const c = new THREE.Mesh(colGeo, matWall);
+                c.position.set(5, 6, z);
+                c.castShadow = true;
+                scene.add(c);
+                colliders.push(new THREE.Box3().setFromObject(c));
 
-                // 荧光灯模型
-                const lightMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 4), new THREE.MeshBasicMaterial({color: 0xccffff}));
-                lightMesh.position.set(5, 9, z);
-                scene.add(lightMesh);
-
-                // 真实光源
-                const point = new THREE.PointLight(0xaaddff, 0.8, 15);
-                point.position.set(5, 8, z);
-                point.castShadow = true;
-                scene.add(point);
+                const l = new THREE.PointLight(0xddeeff, 1, 15);
+                l.position.set(5, 8, z);
+                scene.add(l);
             }
 
-            // 5. 自动售货机 (交互对象)
-            const vm = new THREE.Group();
-            const vmBox = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), new THREE.MeshStandardMaterial({color: 0x222, roughness: 0.2}));
-            vmBox.position.y = 2;
-            vm.add(vmBox);
+            // 5. 售货机 (修复穿模：硬编码碰撞盒)
+            const vmGroup = new THREE.Group();
+            const vmMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), new THREE.MeshStandardMaterial({color: 0x333, roughness: 0.1}));
+            vmMesh.position.y = 2; 
+            vmGroup.add(vmMesh);
+            
             // 屏幕
-            const vmScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1), new THREE.MeshBasicMaterial({color: 0x00ffaa}));
-            vmScreen.position.set(0, 2.5, -1.01);
-            vmScreen.rotation.y = Math.PI;
-            vmScreen.name = "screen";
-            vm.add(vmScreen);
-            // 光源
-            vendingMachineLight = new THREE.PointLight(0x00ffaa, 1, 5);
-            vendingMachineLight.position.set(0, 2.5, -2);
-            vm.add(vendingMachineLight);
-            
-            vm.position.set(18, 0, 10);
-            vm.name = "vending_machine";
-            scene.add(vm);
-            colliders.push(new THREE.Box3().setFromObject(vmBox)); // 物理碰撞
+            const sc = new THREE.Mesh(new THREE.PlaneGeometry(1.5,1), new THREE.MeshBasicMaterial({color:0x00ff00}));
+            sc.position.set(0,2.5,-1.01);
+            sc.rotation.y = Math.PI;
+            vmGroup.add(sc);
+            vmLight = new THREE.PointLight(0x00ff00, 1, 4);
+            vmLight.position.set(0,2.5,-1.5);
+            vmGroup.add(vmLight);
 
-            // 6. 列车 (高精度)
+            vmGroup.position.set(18, 0, 10);
+            vmGroup.name = 'vending_machine';
+            scene.add(vmGroup);
+
+            // *** 核心修复：手动添加售货机碰撞盒 ***
+            // 售货机在 (18, 0, 10), 大小 2x4x2. 
+            // 范围 x:[17, 19], y:[0, 4], z:[9, 11]
+            // 为了保险，我们把它扩大一点点 (16.8 - 19.2)
+            const vmBox = new THREE.Box3(
+                new THREE.Vector3(16.8, 0, 8.8),
+                new THREE.Vector3(19.2, 5, 11.2)
+            );
+            colliders.push(vmBox);
+
+            // 6. 列车
             trainGroup = new THREE.Group();
-            trainBody = new THREE.Mesh(new THREE.BoxGeometry(4.2, 4.5, 80), matMetal);
-            trainBody.position.y = 2.25;
-            trainGroup.add(trainBody);
-            
-            const winMat = new THREE.MeshBasicMaterial({color: 0xccffee});
-            const windows = new THREE.Mesh(new THREE.BoxGeometry(4.25, 1, 78), winMat);
-            windows.position.y = 2.5;
-            trainGroup.add(windows);
-            
-            const headLight = new THREE.SpotLight(0xffffff, 150, 200, 0.6);
-            headLight.position.set(0, 2, 41);
-            headLight.target.position.set(0, 0, 100);
-            headLight.castShadow = true;
-            trainGroup.add(headLight);
-            trainGroup.add(headLight.target);
-
+            trainBodyMesh = new THREE.Mesh(new THREE.BoxGeometry(4.2, 4.5, 80), new THREE.MeshStandardMaterial({color: 0xcccccc, metalness:0.7}));
+            trainBodyMesh.position.y = 2.25;
+            trainGroup.add(trainBodyMesh);
+            const tLight = new THREE.SpotLight(0xffffff, 100, 150);
+            tLight.position.set(0,2,41); tLight.target.position.set(0,0,100);
+            trainGroup.add(tLight); trainGroup.add(tLight.target);
             trainGroup.position.set(-6, -3, -400);
             scene.add(trainGroup);
         }
 
-        // --- 物理与控制 ---
-        function onKey(e, down) {
-            switch(e.code) {
-                case 'KeyW': input.w = down; break;
-                case 'KeyS': input.s = down; break;
-                case 'KeyA': input.a = down; break;
-                case 'KeyD': input.d = down; break;
-                case 'Space': if(down && canJump) velocity.y = CONFIG.jumpForce; break;
-                case 'ShiftLeft': input.shift = down; break;
-            }
-        }
-
-        function onInteract() {
-            if(!controls.isLocked) return;
-            const ray = new THREE.Raycaster();
-            ray.setFromCamera(new THREE.Vector2(0,0), camera);
-            const hits = ray.intersectObjects(scene.children, true);
-            
-            if(hits.length > 0 && hits[0].distance < 4) {
-                // 向上查找
-                let obj = hits[0].object;
-                while(obj.parent && obj.parent !== scene) obj = obj.parent;
-                
-                if(obj.name === 'vending_machine') {
-                    showMsg("SYSTEM ERROR: OUT OF STOCK");
-                    glitchEffect();
-                    playGlitchSound();
-                }
-            }
-        }
-
+        // --- 逻辑循环 ---
         function updatePhysics(dt) {
-            if(!controls.isLocked) return;
-
-            // 阻尼与重力
-            velocity.x -= velocity.x * 10.0 * dt;
-            velocity.z -= velocity.z * 10.0 * dt;
+            // 阻尼
+            velocity.x -= velocity.x * 10 * dt;
+            velocity.z -= velocity.z * 10 * dt;
             velocity.y -= CONFIG.gravity * dt;
 
-            // 移动计算
-            const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y=0; fwd.normalize();
-            const right = new THREE.Vector3().crossVectors(fwd, camera.up).normalize();
-            const speed = input.shift ? CONFIG.runSpeed : CONFIG.speed;
+            // 移动输入处理
+            const speed = input.run ? CONFIG.runSpeed : CONFIG.walkSpeed;
+            // 获取相机水平方向
+            const forward = new THREE.Vector3(); 
+            camera.getWorldDirection(forward);
+            forward.y = 0; forward.normalize();
+            const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
 
-            if(input.w) { velocity.x += fwd.x * speed * dt * 10; velocity.z += fwd.z * speed * dt * 10; }
-            if(input.s) { velocity.x -= fwd.x * speed * dt * 10; velocity.z -= fwd.z * speed * dt * 10; }
-            if(input.d) { velocity.x += right.x * speed * dt * 10; velocity.z += right.z * speed * dt * 10; }
-            if(input.a) { velocity.x -= right.x * speed * dt * 10; velocity.z -= right.z * speed * dt * 10; }
+            // 组合输入 (WASD + Joystick)
+            if (input.y !== 0) {
+                velocity.x += forward.x * speed * input.y * dt * 10;
+                velocity.z += forward.z * speed * input.y * dt * 10;
+            }
+            if (input.x !== 0) {
+                velocity.x += right.x * speed * input.x * dt * 10;
+                velocity.z += right.z * speed * input.x * dt * 10;
+            }
+
+            // 移动端视角处理
+            if(isMobile && (touchLook.x !== 0 || touchLook.y !== 0)) {
+                camera.rotation.y -= touchLook.x * dt;
+                // 限制抬头低头
+                // Threejs rotation Euler order YXZ
+                // 手动限制 Pitch
+                // 这是一个简化处理，直接改 rotation.x
+                camera.rotation.x -= touchLook.y * dt;
+                camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
+                
+                // 阻尼回中? 不，保持
+                touchLook.x = 0; touchLook.y = 0; // 单帧消耗
+            }
 
             // 分轴碰撞
-            camera.position.x += velocity.x * dt;
-            if(checkCollisions()) { camera.position.x -= velocity.x * dt; velocity.x = 0; }
-            
-            camera.position.z += velocity.z * dt;
-            if(checkCollisions()) { camera.position.z -= velocity.z * dt; velocity.z = 0; }
-
+            function attemptMove(axis, amount) {
+                camera.position[axis] += amount;
+                if(checkCollision()) {
+                    camera.position[axis] -= amount;
+                    velocity[axis] = 0;
+                }
+            }
+            attemptMove('x', velocity.x * dt);
+            attemptMove('z', velocity.z * dt);
             camera.position.y += velocity.y * dt;
 
-            // 地面检测
+            // 地面
             const groundY = camera.position.x > 0 ? 0 : -3;
-            if(camera.position.y < groundY + CONFIG.height) {
-                camera.position.y = groundY + CONFIG.height;
+            if(camera.position.y < groundY + CONFIG.playerHeight) {
+                camera.position.y = groundY + CONFIG.playerHeight;
                 velocity.y = 0;
                 canJump = true;
             } else {
                 canJump = false;
             }
-            if(camera.position.y < -50) { camera.position.set(8,2,0); velocity.set(0,0,0); }
 
-            // 列车震动与碰撞
+            if(camera.position.y < -50) { camera.position.set(10,2,0); velocity.set(0,0,0); }
+
+            // 列车检测
             if(trainActive) {
-                // 碰撞
                 const pBox = new THREE.Box3();
-                const r = CONFIG.radius;
+                const r = CONFIG.playerRadius;
                 pBox.min.set(camera.position.x-r, camera.position.y-1, camera.position.z-r);
                 pBox.max.set(camera.position.x+r, camera.position.y, camera.position.z+r);
-                trainBox.setFromObject(trainBody);
-                
+                trainBox.setFromObject(trainBodyMesh);
                 if(trainBox.intersectsBox(pBox)) {
-                    // 撞飞物理
-                    velocity.y = 15; velocity.x = 50; velocity.z += 10;
+                    velocity.y = 15; velocity.x = 40; velocity.z = 10;
                     playHitSound();
-                }
-
-                // 相机震动 (距离越近震动越大)
-                const dist = Math.abs(camera.position.x - trainGroup.position.x);
-                if(dist < 20) {
-                    const intensity = (20 - dist) / 20 * 0.1;
-                    camera.position.y += (Math.random()-0.5) * intensity;
-                    camera.position.x += (Math.random()-0.5) * intensity;
                 }
             }
         }
 
-        function checkCollisions() {
+        function checkCollision() {
             const pBox = new THREE.Box3();
-            const r = CONFIG.radius;
+            const r = CONFIG.playerRadius;
+            // 检测脚部和头部
             pBox.min.set(camera.position.x-r, camera.position.y-1.5, camera.position.z-r);
-            pBox.max.set(camera.position.x+r, camera.position.y+0.5, camera.position.z+r);
-            
+            pBox.max.set(camera.position.x+r, camera.position.y+0.2, camera.position.z+r);
             for(let b of colliders) if(b.intersectsBox(pBox)) return true;
             return false;
         }
 
-        // --- 动画循环 ---
+        function onInteract() {
+            // 简单的射线检测
+            const ray = new THREE.Raycaster();
+            ray.setFromCamera(new THREE.Vector2(0,0), camera);
+            const hits = ray.intersectObjects(scene.children, true);
+            if(hits.length > 0 && hits[0].distance < 4) {
+                let obj = hits[0].object;
+                while(obj.parent && obj.parent !== scene) obj = obj.parent;
+                if(obj.name === 'vending_machine') {
+                    showMsg("库存不足 / OUT OF STOCK");
+                    vmLight.color.setHex(0xff0000);
+                    setTimeout(() => vmLight.color.setHex(0x00ff00), 500);
+                    playHitSound();
+                }
+            }
+        }
+
+        function showMsg(txt) {
+            const m = document.getElementById('msg');
+            m.innerText = txt;
+            m.style.opacity = 1;
+            setTimeout(() => m.style.opacity = 0, 2000);
+        }
+
         function triggerTrain() {
             if(trainActive) return;
-            trainActive = true;
-            trainTimer = 0;
-            playTrainPassSound();
+            trainActive = true; trainTimer = 0;
+            playTrainSound();
         }
 
         function animate() {
@@ -442,166 +527,69 @@
             if(trainActive) {
                 trainTimer += dt;
                 const dur = 6.0;
-                if(trainTimer < dur) {
-                    trainGroup.position.z = -300 + (600 * (trainTimer/dur));
-                } else {
-                    trainActive = false;
-                    trainGroup.position.z = -400;
-                }
+                if(trainTimer < dur) trainGroup.position.z = -300 + 600*(trainTimer/dur);
+                else { trainActive = false; trainGroup.position.z = -400; }
             }
 
             renderer.render(scene, camera);
-        }
-
-        // --- 视觉特效 ---
-        function glitchEffect() {
-            // 简单的闪烁
-            let count = 0;
-            const interval = setInterval(() => {
-                vendingMachineLight.intensity = Math.random() * 2;
-                vendingMachineLight.color.setHex(Math.random() > 0.5 ? 0xff0000 : 0x00ffaa);
-                count++;
-                if(count > 10) {
-                    clearInterval(interval);
-                    vendingMachineLight.intensity = 1;
-                    vendingMachineLight.color.setHex(0x00ffaa);
-                }
-            }, 50);
-        }
-
-        function showMsg(txt) {
-            const el = document.getElementById('interact-msg');
-            el.innerText = txt;
-            el.style.opacity = 1;
-            setTimeout(() => el.style.opacity = 0, 2000);
-        }
-
-        // --- 高级音频引擎 ---
-        async function initAudio() {
-            const AC = window.AudioContext || window.webkitAudioContext;
-            audioCtx = new AC();
-            if(audioCtx.state === 'suspended') await audioCtx.resume();
-            masterGain = audioCtx.createGain();
-            masterGain.gain.value = 0.5;
-            
-            // 总线压缩器 (模拟电影听感)
-            const comp = audioCtx.createDynamicsCompressor();
-            comp.threshold.value = -24;
-            comp.knee.value = 30;
-            comp.ratio.value = 12;
-            masterGain.connect(comp);
-            comp.connect(audioCtx.destination);
-        }
-
-        function startAmbientLayers() {
-            // 1. 低频嗡鸣 (Sub-bass)
-            const osc1 = audioCtx.createOscillator();
-            osc1.frequency.value = 40;
-            const g1 = audioCtx.createGain();
-            g1.gain.value = 0.1;
-            osc1.connect(g1).connect(masterGain);
-            osc1.start();
-
-            // 2. 高频电流声 (Electric Hum)
-            const osc2 = audioCtx.createOscillator();
-            osc2.type = 'sawtooth';
-            osc2.frequency.value = 12000; // 极高频
-            const g2 = audioCtx.createGain();
-            g2.gain.value = 0.005;
-            osc2.connect(g2).connect(masterGain);
-            osc2.start();
-
-            // 3. 随机金属音 (Procedural random sounds)
-            setInterval(() => {
-                if(Math.random() > 0.7) playRandomCreak();
-            }, 3000);
-        }
-
-        function playRandomCreak() {
-            const t = audioCtx.currentTime;
-            const osc = audioCtx.createOscillator();
-            osc.frequency.value = 200 + Math.random() * 500;
-            osc.type = 'triangle';
-            
-            const gain = audioCtx.createGain();
-            gain.gain.setValueAtTime(0, t);
-            gain.gain.linearRampToValueAtTime(0.02, t + 0.1);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
-            
-            // 混响发送
-            const panner = audioCtx.createPanner();
-            panner.positionX.value = (Math.random() - 0.5) * 10;
-            panner.positionZ.value = (Math.random() - 0.5) * 10;
-            
-            osc.connect(gain).connect(panner).connect(masterGain);
-            osc.start(); osc.stop(t+2);
-        }
-
-        function playTrainPassSound() {
-            const t = audioCtx.currentTime;
-            const dur = 6.0;
-
-            // 白噪引擎声
-            const bSize = audioCtx.sampleRate * dur;
-            const buf = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate);
-            const data = buf.getChannelData(0);
-            for(let i=0; i<bSize; i++) data[i] = (Math.random()*2-1);
-            
-            const src = audioCtx.createBufferSource();
-            src.buffer = buf;
-
-            // 滤波器模拟风阻
-            const filter = audioCtx.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(200, t);
-            filter.frequency.exponentialRampToValueAtTime(2000, t+dur/2);
-            filter.frequency.exponentialRampToValueAtTime(100, t+dur);
-
-            // 3D声场移动
-            const panner = audioCtx.createPanner();
-            panner.panningModel = 'HRTF';
-            panner.positionX.value = -6;
-            panner.positionZ.setValueAtTime(-200, t);
-            panner.positionZ.linearRampToValueAtTime(200, t+dur);
-
-            const gain = audioCtx.createGain();
-            gain.gain.setValueAtTime(0, t);
-            gain.gain.linearRampToValueAtTime(2.0, t+dur/2); // 很大声
-            gain.gain.linearRampToValueAtTime(0, t+dur);
-
-            src.connect(filter).connect(gain).connect(panner).connect(masterGain);
-            src.start();
-        }
-
-        function playHitSound() {
-            const t = audioCtx.currentTime;
-            const osc = audioCtx.createOscillator();
-            osc.type = 'square';
-            osc.frequency.value = 50;
-            const g = audioCtx.createGain();
-            g.gain.setValueAtTime(1, t);
-            g.gain.exponentialRampToValueAtTime(0.01, t+0.5);
-            osc.connect(g).connect(masterGain);
-            osc.start(); osc.stop(t+0.5);
-        }
-
-        function playGlitchSound() {
-            const t = audioCtx.currentTime;
-            const osc = audioCtx.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(800, t);
-            osc.frequency.linearRampToValueAtTime(200, t+0.1);
-            const g = audioCtx.createGain();
-            g.gain.setValueAtTime(0.1, t);
-            g.gain.exponentialRampToValueAtTime(0.01, t+0.2);
-            osc.connect(g).connect(masterGain);
-            osc.start(); osc.stop(t+0.2);
         }
 
         function onResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- 音频 ---
+        async function initAudio() {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AC();
+            if(audioCtx.state === 'suspended') await audioCtx.resume();
+            masterGain = audioCtx.createGain();
+            masterGain.gain.value = 0.5;
+            masterGain.connect(audioCtx.destination);
+        }
+
+        function startLoop() {
+            const osc = audioCtx.createOscillator();
+            osc.frequency.value = 50;
+            const g = audioCtx.createGain();
+            g.gain.value = 0.05;
+            osc.connect(g).connect(masterGain);
+            osc.start();
+        }
+
+        function playTrainSound() {
+            const t = audioCtx.currentTime;
+            const b = audioCtx.createBuffer(1, audioCtx.sampleRate*6, audioCtx.sampleRate);
+            const d = b.getChannelData(0);
+            for(let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+            const src = audioCtx.createBufferSource();
+            src.buffer = b;
+            const f = audioCtx.createBiquadFilter();
+            f.type = 'bandpass';
+            f.frequency.setValueAtTime(100, t);
+            f.frequency.linearRampToValueAtTime(1200, t+3);
+            f.frequency.linearRampToValueAtTime(100, t+6);
+            const pan = audioCtx.createPanner();
+            pan.positionX.value = -6;
+            pan.positionZ.setValueAtTime(-200, t);
+            pan.positionZ.linearRampToValueAtTime(200, t+6);
+            src.connect(f).connect(pan).connect(masterGain);
+            src.start();
+        }
+
+        function playHitSound() {
+            const t = audioCtx.currentTime;
+            const o = audioCtx.createOscillator();
+            o.type = 'square';
+            o.frequency.setValueAtTime(150, t);
+            o.frequency.exponentialRampToValueAtTime(20, t+0.3);
+            const g = audioCtx.createGain();
+            g.gain.value = 0.5;
+            g.gain.exponentialRampToValueAtTime(0.01, t+0.3);
+            o.connect(g).connect(masterGain);
+            o.start(); o.stop(t+0.3);
         }
     </script>
 </body>
