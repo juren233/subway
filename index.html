@@ -2,48 +2,53 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>深夜地铁站 | 操控修复版</title>
+    <title>地铁站 V4.0 | 操控终极修复</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; user-select: none; }
-        canvas { width: 100%; height: 100%; display: block; }
-        
+        #canvas-container { width: 100%; height: 100%; }
+
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(to bottom, #111, #222);
+            background: rgba(0,0,0,0.9);
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: #fff; z-index: 100;
+            color: #fff; z-index: 10;
         }
-        #overlay h1 { font-size: 3rem; text-shadow: 0 0 20px #0ff; margin-bottom: 10px; }
-        #start-btn {
-            padding: 20px 60px; border: none; background: #0ff; color: #000;
-            font-size: 1.5rem; font-weight: bold; cursor: pointer; border-radius: 5px;
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5); transition: 0.2s;
+        
+        button {
+            padding: 15px 40px; font-size: 1.5rem; background: #fff; border: none; 
+            cursor: pointer; font-weight: bold; border-radius: 4px;
+            transition: 0.2s;
         }
-        #start-btn:hover { transform: scale(1.05); background: #fff; }
+        button:hover { background: #ccc; transform: scale(1.05); }
 
-        #ui { position: absolute; bottom: 30px; left: 30px; color: rgba(255,255,255,0.8); pointer-events: none; }
-        .key { display: inline-block; background: #333; border: 1px solid #666; padding: 4px 8px; border-radius: 4px; margin: 0 2px; color: #fff; font-weight: bold; }
+        #hud {
+            position: absolute; bottom: 20px; left: 20px; color: rgba(255,255,255,0.7);
+            pointer-events: none;
+        }
+        .key { border: 1px solid #999; padding: 2px 6px; border-radius: 3px; color: #fff; background: rgba(255,255,255,0.1); }
         
         #crosshair {
-            position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
-            background: rgba(255, 255, 255, 0.9); border-radius: 50%; transform: translate(-50%, -50%);
-            border: 1px solid rgba(0,0,0,0.5);
+            position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
+            background: #0f0; border-radius: 50%; transform: translate(-50%, -50%);
+            box-shadow: 0 0 5px #0f0;
         }
     </style>
 </head>
 <body>
     <div id="overlay">
-        <h1>V3.1 FIXED</h1>
-        <p style="color: #aaa; margin-bottom: 30px;">操控系统重构 • 物理碰撞 • 实体列车</p>
-        <button id="start-btn">启动引擎 (INITIALIZE)</button>
+        <h1 style="color: #4f4;">SYSTEM REBOOTED</h1>
+        <p>操控方向已校准 | 物理引擎已重置</p>
+        <br>
+        <button id="start-btn">进入地铁站</button>
     </div>
 
     <div id="crosshair"></div>
-    <div id="ui">
-        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> 移动 
-        <span class="key">SPACE</span> 跳跃 
-        <span class="key">SHIFT</span> 疾跑
+    <div id="hud">
+        <p><span class="key">W</span><span class="key">S</span> 前后 <span class="key">A</span><span class="key">D</span> 左右</p>
+        <p><span class="key">SPACE</span> 跳跃 <span class="key">SHIFT</span> 疾跑</p>
     </div>
+
+    <div id="canvas-container"></div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
@@ -53,307 +58,314 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-        // --- 核心参数 ---
-        const CONFIG = {
-            gravity: 25.0,     // 重力加速度
-            moveSpeed: 15.0,   // 走路速度
-            runSpeed: 30.0,    // 跑步速度
-            jumpForce: 10.0,   // 跳跃高度
-            eyeHeight: 1.7,    // 眼睛高度
-            playerRadius: 0.6  // 碰撞半径
+        // --- 核心配置 ---
+        const SETTINGS = {
+            walkSpeed: 12.0,
+            runSpeed: 25.0,
+            gravity: 30.0,
+            jumpStrength: 10.0,
+            playerHeight: 1.6,
+            playerRadius: 0.5
         };
 
         // 全局变量
         let camera, scene, renderer, controls;
-        let moveF=false, moveB=false, moveL=false, moveR=false, isRunning=false;
+        let lastTime = performance.now();
+        
+        // 输入状态
+        const input = { w: false, s: false, a: false, d: false, space: false, shift: false };
+        
+        // 物理状态
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
         let canJump = false;
-        let velocityY = 0; // 垂直速度单独控制
-        let prevTime = performance.now();
 
-        // 碰撞数据
-        const walls = [];   // Box3 数组
-        const pillars = []; // {x, z, r} 数组
+        // 碰撞体
+        const colliders = []; // 存放所有不可穿过的物体 Box3
 
-        // 场景对象
-        let trainGroup, trainActive = false, trainStart = 0;
+        // 游戏对象
+        let trainGroup, trainActive = false, trainTimer = 0;
         let audioCtx, masterGain;
 
         init();
         animate();
 
         function init() {
-            // 1. 场景
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x111115);
-            scene.fog = new THREE.FogExp2(0x111115, 0.015);
+            const container = document.getElementById('canvas-container');
 
-            // 2. 相机
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 500);
+            // 1. 初始化场景
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111111);
+            scene.fog = new THREE.FogExp2(0x111111, 0.02);
+
+            // 2. 初始化相机
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             
             // 3. 渲染器
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 限制像素比以保证性能
+            renderer.setPixelRatio(window.devicePixelRatio);
             renderer.shadowMap.enabled = true;
-            document.body.appendChild(renderer.domElement);
+            container.appendChild(renderer.domElement);
 
-            // 4. 灯光 (保证不黑)
-            const amb = new THREE.AmbientLight(0x666677, 1.2); 
-            scene.add(amb);
-            const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-            dir.position.set(30, 50, 20);
-            dir.castShadow = true;
-            dir.shadow.mapSize.set(2048, 2048);
-            scene.add(dir);
+            // 4. 灯光 (确保能看清)
+            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambient);
+            const dirLight = new THREE.DirectionalLight(0xaaccff, 0.8);
+            dirLight.position.set(50, 100, 50);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
 
             // 5. 控制器
             controls = new PointerLockControls(camera, document.body);
-            scene.add(controls.getObject()); // 关键：将控制器对象加入场景
-
-            // 按钮逻辑
+            
+            // 初始位置设置 (确保在站台上方)
+            camera.position.set(10, 2, 0); 
+            
+            // UI 逻辑
             const btn = document.getElementById('start-btn');
             const overlay = document.getElementById('overlay');
-            
-            // 初始安全位置 (Y=2.5 防止卡地板)
-            controls.getObject().position.set(10, 2.5, 0);
-
             btn.addEventListener('click', async () => {
                 overlay.style.display = 'none';
                 controls.lock();
                 await initAudio();
-                startLoopAudio();
-                setInterval(spawnTrain, 15000); // 15秒刷车
+                startLoop();
+                // 启动列车循环
+                setInterval(triggerTrain, 12000);
             });
-
             controls.addEventListener('unlock', () => {
                 overlay.style.display = 'flex';
-                btn.innerText = "回到游戏 (RESUME)";
+                btn.innerText = "继续游戏";
             });
 
-            // 6. 输入监听
-            document.addEventListener('keydown', onKey(true));
-            document.addEventListener('keyup', onKey(false));
+            // 6. 输入监听 (使用 KeyCode 确保准确)
+            document.addEventListener('keydown', (e) => onKey(e, true));
+            document.addEventListener('keyup', (e) => onKey(e, false));
 
-            // 7. 搭建世界
-            buildWorld();
-            
+            // 7. 构建场景
+            buildLevel();
+
             window.addEventListener('resize', onResize);
         }
 
-        // --- 物理移动核心 (重写版) ---
+        function onKey(e, down) {
+            switch(e.code) {
+                case 'KeyW': input.w = down; break;
+                case 'KeyS': input.s = down; break;
+                case 'KeyA': input.a = down; break;
+                case 'KeyD': input.d = down; break;
+                case 'Space': if(down && canJump) velocity.y = SETTINGS.jumpStrength; break;
+                case 'ShiftLeft': input.shift = down; break;
+            }
+        }
+
+        // --- 物理移动核心 (标准 FPS 逻辑) ---
         function updatePhysics(dt) {
-            // 限制最大 dt 防止切换标签时穿墙
-            const delta = Math.min(dt, 0.1); 
+            if (!controls.isLocked) return;
 
-            const obj = controls.getObject(); // 这是相机的包装容器
-            const pos = obj.position;
+            // 1. 摩擦力/阻尼 (模拟空气阻力，让移动停下来)
+            velocity.x -= velocity.x * 10.0 * dt;
+            velocity.z -= velocity.z * 10.0 * dt;
+            velocity.y -= SETTINGS.gravity * dt; // 重力
 
-            // 1. 水平移动计算 (使用 Math.sin/cos 确保稳定)
-            // 获取摄像机的水平朝向角度 (Yaw)
-            // PointerLockControls 内部对象结构: obj.rotation.y 是水平旋转
-            const yaw = obj.rotation.y; 
-            const speed = isRunning ? CONFIG.runSpeed : CONFIG.moveSpeed;
+            // 2. 计算移动方向 (基于相机朝向)
+            // 获取相机的前方矢量 (忽略 Y 轴)
+            const forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0;
+            forward.normalize();
 
-            let dx = 0;
-            let dz = 0;
+            // 获取相机的右方矢量 (前方 x 上方)
+            const right = new THREE.Vector3();
+            right.crossVectors(forward, camera.up).normalize(); // 注意：Three.js 中 cross(Fwd, Up) = Right (左手系?) 
+            // 实际上: cross((0,0,-1), (0,1,0)) = (1,0,0) -> +X 是右边。正确。
 
-            if (moveF) { dx -= Math.sin(yaw); dz -= Math.cos(yaw); }
-            if (moveB) { dx += Math.sin(yaw); dz += Math.cos(yaw); }
-            if (moveL) { dx -= Math.cos(yaw); dz += Math.sin(yaw); } // 左是 Yaw - 90度
-            if (moveR) { dx += Math.cos(yaw); dz -= Math.sin(yaw); }
-
-            // 归一化并应用速度
-            if (dx !== 0 || dz !== 0) {
-                const len = Math.sqrt(dx*dx + dz*dz);
-                dx = (dx / len) * speed * delta;
-                dz = (dz / len) * speed * delta;
+            // 3. 施加移动力
+            const speed = input.shift ? SETTINGS.runSpeed : SETTINGS.walkSpeed;
+            
+            if (input.w) {
+                velocity.x += forward.x * speed * dt * 10;
+                velocity.z += forward.z * speed * dt * 10;
+            }
+            if (input.s) { // 反向
+                velocity.x -= forward.x * speed * dt * 10;
+                velocity.z -= forward.z * speed * dt * 10;
+            }
+            if (input.d) { // 向右
+                velocity.x += right.x * speed * dt * 10;
+                velocity.z += right.z * speed * dt * 10;
+            }
+            if (input.a) { // 向左
+                velocity.x -= right.x * speed * dt * 10;
+                velocity.z -= right.z * speed * dt * 10;
             }
 
-            // 2. 尝试 X 轴移动与碰撞检测
-            const originalX = pos.x;
-            pos.x += dx;
-            if (checkWallCollision(pos)) {
-                pos.x = originalX; // 撞墙回退
+            // 4. 分轴应用移动并检测碰撞 (防卡死滑墙逻辑)
+            
+            // --- X 轴移动 ---
+            camera.position.x += velocity.x * dt;
+            if (checkCollision()) {
+                camera.position.x -= velocity.x * dt; // 撞了，退回去
+                velocity.x = 0; // 停止该方向速度
             }
 
-            // 3. 尝试 Z 轴移动与碰撞检测
-            const originalZ = pos.z;
-            pos.z += dz;
-            if (checkWallCollision(pos)) {
-                pos.z = originalZ; // 撞墙回退
+            // --- Z 轴移动 ---
+            camera.position.z += velocity.z * dt;
+            if (checkCollision()) {
+                camera.position.z -= velocity.z * dt;
+                velocity.z = 0;
             }
 
-            // 4. 垂直移动 (重力)
-            velocityY -= CONFIG.gravity * delta;
-            pos.y += velocityY * delta;
+            // --- Y 轴 (垂直) 移动 ---
+            camera.position.y += velocity.y * dt;
 
             // 5. 地面检测
-            // 站台区: X > 0, 高度 0
-            // 轨道区: X <= 0, 高度 -3
-            const groundHeight = (pos.x > 0) ? 0 : -3.0;
-            const playerBottom = pos.y - CONFIG.eyeHeight;
-
-            // 如果脚底掉到了地面以下
-            if (playerBottom < groundHeight) {
-                pos.y = groundHeight + CONFIG.eyeHeight;
-                velocityY = 0;
+            // 简单的逻辑：站台高度 0 (区域 x>0)，轨道高度 -3 (区域 x<=0)
+            const onPlatform = camera.position.x > 0;
+            const groundY = onPlatform ? 0 : -3.0;
+            
+            // 落地检测
+            if (camera.position.y < groundY + SETTINGS.playerHeight) {
+                velocity.y = 0;
+                camera.position.y = groundY + SETTINGS.playerHeight;
                 canJump = true;
+            } else {
+                canJump = false;
             }
 
-            // 6. 撞车检测
-            if (trainActive && pos.x <= 0) { // 只有在轨道区才会被撞
-                // 简单的 Z 轴范围检测
-                const trainZ = trainGroup.position.z;
-                if (Math.abs(pos.z - trainZ) < 40) { // 车长范围
+            // 6. 掉出世界检测 (防止无限坠落)
+            if (camera.position.y < -50) {
+                // 只有真的掉很深才会重置
+                camera.position.set(10, 2, 0); 
+                velocity.set(0,0,0);
+            }
+
+            // 7. 列车撞击逻辑
+            if (trainActive && camera.position.x < 0) { // 在轨道区
+                // 简单的 Z 轴重合检测
+                if (Math.abs(camera.position.z - trainGroup.position.z) < 40) {
                     // 被撞飞
-                    velocityY = 15;
-                    pos.x = 10; // 强制弹回站台
+                    velocity.y = 20;
+                    velocity.x = 50; // 猛烈撞回站台
                     playHitSound();
                 }
             }
         }
 
-        // 碰撞检测工具
-        function checkWallCollision(p) {
-            const r = CONFIG.playerRadius;
-            
-            // 1. 柱子检测 (圆柱体)
-            for(let col of pillars) {
-                const distSq = (p.x - col.x)**2 + (p.z - col.z)**2;
-                if (distSq < (col.r + r)**2) return true;
-            }
-
-            // 2. 墙壁检测 (Box3)
-            // 构造玩家当前的 AABB
+        // 碰撞检测：检查玩家当前位置是否与任何 collider 重叠
+        function checkCollision() {
             const playerBox = new THREE.Box3();
-            playerBox.min.set(p.x - r, p.y - CONFIG.eyeHeight, p.z - r);
-            playerBox.max.set(p.x + r, p.y, p.z + r);
+            const pos = camera.position;
+            const r = SETTINGS.playerRadius;
+            // 构造玩家包围盒 (中心是 pos，稍微小一点避免太敏感)
+            playerBox.min.set(pos.x - r, pos.y - 1.5, pos.z - r);
+            playerBox.max.set(pos.x + r, pos.y + 0.5, pos.z + r);
 
-            for(let wall of walls) {
-                if (wall.intersectsBox(playerBox)) return true;
+            for (const box of colliders) {
+                if (box.intersectsBox(playerBox)) return true;
             }
-
             return false;
         }
 
-        // --- 构建世界 ---
-        function buildWorld() {
+        // --- 场景构建 ---
+        function buildLevel() {
             // 材质
-            const mFloor = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.8 });
-            const mWall = new THREE.MeshStandardMaterial({ color: 0x666666 });
+            const matGray = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.5 });
+            const matDark = new THREE.MeshStandardMaterial({ color: 0x222222 });
             
-            // 1. 站台
-            const floor = new THREE.Mesh(new THREE.BoxGeometry(30, 1, 300), mFloor);
-            floor.position.set(15, -0.5, 0); // Surface at y=0
+            // 1. 地板 (站台)
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 200), matGray);
+            floor.position.set(10, -0.5, 0); // 表面 y=0. x从0到20
             floor.receiveShadow = true;
             scene.add(floor);
 
             // 2. 轨道床
-            const track = new THREE.Mesh(new THREE.PlaneGeometry(50, 300), new THREE.MeshStandardMaterial({color: 0x111111}));
-            track.rotation.x = -Math.PI/2;
-            track.position.set(-25, -3, 0);
+            const track = new THREE.Mesh(new THREE.BoxGeometry(40, 1, 200), matDark);
+            track.position.set(-20, -3.5, 0); // 表面 y=-3
             scene.add(track);
 
-            // 3. 后墙 (实体墙)
-            const backWall = new THREE.Mesh(new THREE.BoxGeometry(2, 40, 300), mWall);
-            backWall.position.set(31, 20, 0);
+            // 3. 后墙 (防止倒退掉下去)
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(2, 20, 200), matGray);
+            backWall.position.set(21, 10, 0);
             backWall.castShadow = true;
             scene.add(backWall);
             
-            // 碰撞体: 后墙
-            walls.push(new THREE.Box3(
-                new THREE.Vector3(30, -10, -150), 
-                new THREE.Vector3(32, 50, 150)
-            ));
+            // 添加物理碰撞盒 (Box3)
+            // 后墙碰撞
+            colliders.push(new THREE.Box3(new THREE.Vector3(20, -10, -100), new THREE.Vector3(22, 50, 100)));
+            // 前后边界 (隐形墙)
+            colliders.push(new THREE.Box3(new THREE.Vector3(-50, -10, -102), new THREE.Vector3(50, 50, -100)));
+            colliders.push(new THREE.Box3(new THREE.Vector3(-50, -10, 100), new THREE.Vector3(50, 50, 102)));
+            // 轨道左侧边界
+            colliders.push(new THREE.Box3(new THREE.Vector3(-40, -10, -100), new THREE.Vector3(-38, 50, 100)));
 
-            // 碰撞体: 边界隐形墙
-            walls.push(new THREE.Box3(new THREE.Vector3(-100, -10, -152), new THREE.Vector3(100, 50, -150))); // Front
-            walls.push(new THREE.Box3(new THREE.Vector3(-100, -10, 150), new THREE.Vector3(100, 50, 152)));   // Back
-            walls.push(new THREE.Box3(new THREE.Vector3(-40, -10, -150), new THREE.Vector3(-38, 50, 150)));   // Left limit
+            // 4. 柱子 (物理实体)
+            const colGeo = new THREE.BoxGeometry(2, 10, 2);
+            for(let z=-80; z<=80; z+=20) {
+                const col = new THREE.Mesh(colGeo, matGray);
+                col.position.set(5, 5, z);
+                col.castShadow = true;
+                scene.add(col);
 
-            // 4. 柱子
-            const colGeo = new THREE.CylinderGeometry(1.2, 1.2, 12, 16);
-            for(let z=-100; z<=100; z+=25) {
-                const mesh = new THREE.Mesh(colGeo, mWall);
-                mesh.position.set(8, 6, z);
-                mesh.castShadow = true;
-                scene.add(mesh);
-                
                 // 灯光
-                const l = new THREE.PointLight(0xaaddff, 1.5, 20);
-                l.position.set(8, 10, z);
-                scene.add(l);
+                const light = new THREE.PointLight(0xaaddff, 1, 15);
+                light.position.set(5, 8, z);
+                scene.add(light);
 
-                // 物理数据
-                pillars.push({x: 8, z: z, r: 1.2});
+                // 柱子碰撞盒
+                colliders.push(new THREE.Box3().setFromObject(col));
             }
 
-            // 5. 实体列车组
+            // 5. 实体列车
             trainGroup = new THREE.Group();
-            const tBody = new THREE.Mesh(new THREE.BoxGeometry(4.2, 4.5, 80), new THREE.MeshStandardMaterial({color: 0xaaaaaa, metalness: 0.6}));
-            tBody.position.y = 2.25; // Base at 0 relative to group
+            const tBody = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 80), new THREE.MeshStandardMaterial({color: 0xcccccc}));
+            tBody.position.y = 2; 
             trainGroup.add(tBody);
             
-            const tHead = new THREE.SpotLight(0xffffff, 100, 150);
-            tHead.position.set(0, 3, 40);
-            tHead.target.position.set(0, 1, 100);
-            trainGroup.add(tHead);
-            trainGroup.add(tHead.target);
-            
-            trainGroup.position.set(-6, -3, -500);
+            // 车头灯
+            const tLight = new THREE.SpotLight(0xffffff, 50, 100);
+            tLight.position.set(0, 2, 40);
+            tLight.target.position.set(0, 0, 100);
+            trainGroup.add(tLight);
+            trainGroup.add(tLight.target);
+
+            trainGroup.position.set(-5, -3, -400); // 轨道Y=-3
             scene.add(trainGroup);
         }
 
-        // --- 逻辑控制 ---
-        function onKey(isDown) {
-            return (e) => {
-                switch(e.code) {
-                    case 'KeyW': moveF = isDown; break;
-                    case 'KeyS': moveB = isDown; break;
-                    case 'KeyA': moveL = isDown; break;
-                    case 'KeyD': moveR = isDown; break;
-                    case 'ShiftLeft': isRunning = isDown; break;
-                    case 'Space': 
-                        if(isDown && canJump) {
-                            velocityY = CONFIG.jumpForce;
-                            canJump = false;
-                        } 
-                        break;
-                }
-            };
+        // --- 游戏逻辑 ---
+        function triggerTrain() {
+            if (trainActive) return;
+            trainActive = true;
+            trainTimer = 0;
+            playTrainSound();
         }
 
-        function spawnTrain() {
-            if(trainActive) return;
-            trainActive = true;
-            trainStart = performance.now();
-            playTrainSound();
+        function updateTrain(dt) {
+            if (!trainActive) return;
+            trainTimer += dt;
+            const duration = 5.0; // 5秒冲过站台
+
+            if (trainTimer < duration) {
+                // 简单的线性移动：从 z -250 到 250
+                const progress = trainTimer / duration;
+                trainGroup.position.z = -250 + (500 * progress);
+            } else {
+                trainActive = false;
+                trainGroup.position.z = -400;
+            }
         }
 
         function animate() {
             requestAnimationFrame(animate);
-
+            
             const time = performance.now();
-            const delta = (time - prevTime) / 1000;
-            prevTime = time;
+            const dt = Math.min((time - lastTime) / 1000, 0.1); // 限制每帧最大时间，防止卡顿穿墙
+            lastTime = time;
 
-            if (controls.isLocked) {
-                updatePhysics(delta);
-            }
-
-            // 列车动画
-            if (trainActive) {
-                const dur = 6000; // 6秒通过
-                const elap = time - trainStart;
-                const pct = elap / dur;
-                if (pct < 1.5) {
-                    trainGroup.position.z = -300 + (600 * pct);
-                } else {
-                    trainActive = false;
-                    trainGroup.position.z = -500;
-                }
-            }
-
+            updatePhysics(dt);
+            updateTrain(dt);
+            
             renderer.render(scene, camera);
         }
 
@@ -363,53 +375,64 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // --- 简易音频 ---
+        // --- 音频系统 ---
         async function initAudio() {
             const AC = window.AudioContext || window.webkitAudioContext;
             audioCtx = new AC();
             if(audioCtx.state === 'suspended') await audioCtx.resume();
             masterGain = audioCtx.createGain();
-            masterGain.gain.value = 0.4;
+            masterGain.gain.value = 0.3;
             masterGain.connect(audioCtx.destination);
         }
 
-        function startLoopAudio() {
+        function startLoop() {
             const osc = audioCtx.createOscillator();
-            osc.frequency.value = 50;
-            const g = audioCtx.createGain();
-            g.gain.value = 0.05;
-            osc.connect(g).connect(masterGain);
+            osc.frequency.value = 50; // 50Hz 嗡鸣
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.05;
+            osc.connect(gain).connect(masterGain);
             osc.start();
         }
 
         function playTrainSound() {
             if(!audioCtx) return;
             const t = audioCtx.currentTime;
-            const osc = audioCtx.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(50, t);
-            osc.frequency.exponentialRampToValueAtTime(150, t+3);
             
-            const g = audioCtx.createGain();
-            g.gain.setValueAtTime(0, t);
-            g.gain.linearRampToValueAtTime(0.5, t+3);
-            g.gain.linearRampToValueAtTime(0, t+6);
+            // 噪音模拟
+            const bufferSize = audioCtx.sampleRate * 5;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
             
-            osc.connect(g).connect(masterGain);
-            osc.start(); osc.stop(t+6);
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+            
+            // 滤波器模拟多普勒
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(100, t);
+            filter.frequency.linearRampToValueAtTime(1000, t+2.5);
+            filter.frequency.linearRampToValueAtTime(100, t+5);
+            
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0, t);
+            gain.gain.linearRampToValueAtTime(1, t+2.5);
+            gain.gain.linearRampToValueAtTime(0, t+5);
+            
+            noise.connect(filter).connect(gain).connect(masterGain);
+            noise.start();
         }
 
         function playHitSound() {
             if(!audioCtx) return;
-            const t = audioCtx.currentTime;
             const osc = audioCtx.createOscillator();
-            osc.frequency.value = 100;
             osc.type = 'square';
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
             const g = audioCtx.createGain();
-            g.gain.setValueAtTime(0.5, t);
-            g.gain.exponentialRampToValueAtTime(0.01, t+0.3);
+            g.gain.value = 0.5;
             osc.connect(g).connect(masterGain);
-            osc.start(); osc.stop(t+0.3);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.5);
         }
 
     </script>
