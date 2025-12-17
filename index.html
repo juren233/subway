@@ -2,90 +2,99 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>地铁站 V8.0 | 里世界</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>地铁站 V9 | 最终稳定版</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
-        
-        #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+        /* 基础样式：防止黑屏，默认深蓝背景 */
+        body { margin: 0; overflow: hidden; background-color: #112; font-family: sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+        #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 0; }
 
-        /* UI */
-        #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; display: flex; flex-direction: column; justify-content: space-between;
-        }
-
+        /* 启动遮罩 */
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10, 10, 12, 0.98);
+            background: #000; z-index: 100;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: #fff; z-index: 100; pointer-events: auto; transition: opacity 0.5s;
+            color: #fff; transition: opacity 0.5s;
         }
-        
-        button {
-            padding: 20px 50px; font-size: 1.5rem; background: #fff; color: #000; 
-            border: none; font-weight: 900; cursor: pointer; text-transform: uppercase;
-            box-shadow: 0 0 30px rgba(255, 255, 255, 0.5); margin-top: 30px;
-            animation: pulse 2s infinite;
+        #start-btn {
+            padding: 20px 60px; font-size: 1.5rem; background: #0f0; color: #000;
+            border: none; border-radius: 8px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 0 20px #0f0; margin-top: 20px;
         }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
 
+        /* 准星 */
         #crosshair {
-            position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
-            background: #fff; border-radius: 50%; 
-            transform: translate(-50%, -50%); box-shadow: 0 0 4px #fff;
+            position: absolute; top: 50%; left: 50%; width: 8px; height: 8px;
+            background: rgba(255, 255, 255, 0.8); border-radius: 50%;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 50;
+            transition: all 0.2s; border: 2px solid rgba(0,0,0,0.5);
+        }
+        /* 准星激活状态 */
+        .active-crosshair { background: #f00 !important; width: 16px !important; height: 16px !important; border-color: #fff !important; }
+
+        /* 提示信息 */
+        #msg {
+            position: absolute; top: 30%; width: 100%; text-align: center;
+            color: #ff0; text-shadow: 0 0 5px #000; font-size: 1.5rem;
+            pointer-events: none; z-index: 50; opacity: 0; transition: opacity 0.3s;
         }
 
-        #interaction-msg {
-            text-align: center; color: #ff0; text-shadow: 0 0 10px #ff0; 
-            font-size: 1.5rem; margin-top: 60vh; opacity: 0; transition: opacity 0.2s;
+        /* --- 移动端专用 UI (默认隐藏) --- */
+        .mobile-ui { display: none; position: absolute; z-index: 60; }
+        
+        /* 摇杆区域 */
+        .joystick-area {
+            width: 140px; height: 140px; bottom: 40px;
+            background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
         }
-
-        #inventory {
-            margin: 20px; color: #fff; font-size: 1rem; opacity: 0.7;
-        }
-        .item-slot { display: inline-block; width: 30px; height: 30px; border: 2px solid #555; vertical-align: middle; margin-right: 10px; text-align: center; line-height: 30px; }
-        .has-item { border-color: #f00; background: rgba(255,0,0,0.3); box-shadow: 0 0 10px #f00; }
-
-        /* Mobile Controls */
-        .joystick-zone {
-            position: absolute; bottom: 50px; width: 140px; height: 140px;
-            pointer-events: auto; z-index: 50; display: none;
-        }
-        #stick-left { left: 30px; border: 2px dashed rgba(255,255,255,0.2); border-radius: 50%; }
-        #stick-right { right: 30px; border: 2px dashed rgba(255,255,255,0.2); border-radius: 50%; }
+        #stick-l { left: 30px; }
+        #stick-r { right: 30px; }
+        
+        /* 摇杆头 */
         .knob {
             position: absolute; top: 50%; left: 50%; width: 50px; height: 50px;
-            background: rgba(255, 255, 255, 0.4); border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6); border-radius: 50%;
             transform: translate(-50%, -50%); pointer-events: none;
         }
+
+        /* 互动按钮 (移动端专用) */
+        #action-btn {
+            bottom: 180px; right: 40px; width: 80px; height: 80px;
+            background: rgba(0, 255, 255, 0.3); border: 2px solid #0ff; border-radius: 50%;
+            display: none; justify-content: center; align-items: center; color: #fff; font-weight: bold;
+        }
+        #action-btn:active { background: rgba(0, 255, 255, 0.6); }
+
+        #pc-hint { position: absolute; bottom: 20px; left: 20px; color: #888; pointer-events: none; z-index: 40; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h1 style="font-size: 3rem; margin: 0; letter-spacing: 5px; color: #f22;">VOID_STATION</h1>
-        <p style="color: #888;">收集记忆体 • 踢飞易拉罐 • 开启里世界</p>
-        <button id="start-btn">WAKE UP</button>
+        <h1 style="color: #4af; text-shadow: 0 0 20px #4af;">STATION V9</h1>
+        <p>稳定版 | Stable Build</p>
+        <button id="start-btn">启动 / START</button>
     </div>
 
     <div id="canvas-container"></div>
-
-    <div id="ui-layer">
-        <div id="inventory">
-            <span class="item-slot" id="slot-1"></span> <span id="inv-text">寻找红色记忆体...</span>
-        </div>
-        <div id="interaction-msg">按 [E] / 点击 拾取</div>
-    </div>
-
     <div id="crosshair"></div>
-    
-    <!-- 移动端摇杆 -->
-    <div id="stick-left" class="joystick-zone"><div class="knob" id="knob-l"></div></div>
-    <div id="stick-right" class="joystick-zone"><div class="knob" id="knob-r"></div></div>
+    <div id="msg"></div>
+    <div id="pc-hint">WASD移动 | 鼠标看 | E键交互 | Shift跑</div>
 
+    <!-- 移动端控件 -->
+    <div id="stick-l" class="mobile-ui joystick-area"><div class="knob" id="knob-l"></div></div>
+    <div id="stick-r" class="mobile-ui joystick-area"><div class="knob" id="knob-r"></div></div>
+    <div id="action-btn" class="mobile-ui">交互</div>
+
+    <!-- 引入稳定的 ESM 模块 -->
     <script type="importmap">
-        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+        {
+            "imports": {
+                "three": "https://esm.sh/three@0.160.0",
+                "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+            }
+        }
     </script>
 
     <script type="module">
@@ -93,661 +102,228 @@
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
         // --- 全局配置 ---
-        const CONFIG = {
-            gravity: 30.0,
-            walkSpeed: 12.0,
-            runSpeed: 24.0,
-            kickForce: 15.0, // 踢罐子的力度
-            height: 1.7,
-            radius: 0.5
+        const CFG = {
+            speed: 10,
+            runSpeed: 20,
+            gravity: 30,
+            playerHeight: 1.6
         };
 
+        // 变量
         let camera, scene, renderer, controls;
         let isMobile = false;
         let lastTime = performance.now();
         
-        // 游戏状态
-        let gameState = {
-            hasToken: false,
-            glitchMode: false,
-            tokenObj: null,
-            props: [] // 物理道具数组
-        };
-
-        const input = { x: 0, y: 0, run: false }; 
-        const touchLook = { x: 0, y: 0 };
+        // 运动状态
+        const input = { x: 0, y: 0, run: false };
         const velocity = new THREE.Vector3();
-        let canJump = false;
-        const colliders = [];
+        const touchLook = { x: 0, y: 0 }; // 移动端视角偏移量
 
         // 场景对象
-        let trainGroup, trainBody;
-        let trainActive = false, trainTimer = 0;
-        const trainBox = new THREE.Box3();
-        let vmLight;
-        let glitchUniforms = { time: { value: 0 } }; // 用于后期特效(假)
+        const colliders = []; // 空气墙
+        let trainGroup, trainActive = false, trainTimer = 0;
+        let interactableObj = null; // 当前瞄准的对象
 
         // 音频
-        let audioCtx, masterGain, musicGain;
-        let sequencerInterval;
+        let audioCtx;
 
         init();
         animate();
 
         function init() {
+            // 1. 检测设备
             isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            if(isMobile) {
-                document.getElementById('stick-left').style.display = 'block';
-                document.getElementById('stick-right').style.display = 'block';
-                document.getElementById('interaction-msg').innerText = "点击屏幕拾取";
+            if (isMobile) {
+                document.querySelectorAll('.mobile-ui').forEach(el => el.style.display = 'flex');
+                document.getElementById('pc-hint').style.display = 'none';
             }
 
-            // 1. 渲染器
-            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            // 2. 渲染器
+            const container = document.getElementById('canvas-container');
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.3;
-            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            container.appendChild(renderer.domElement);
 
-            // 2. 场景
+            // 3. 场景
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x1a1a22);
-            scene.fog = new THREE.FogExp2(0x1a1a22, 0.015);
+            scene.background = new THREE.Color(0x111118); // 深蓝夜色
+            scene.fog = new THREE.FogExp2(0x111118, 0.02);
 
-            // 3. 相机
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
-            camera.position.set(10, 2, 0);
-            camera.rotation.order = 'YXZ';
+            // 4. 相机
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
+            camera.position.set(5, 2, 0); // 站在站台中间
+            camera.rotation.order = 'YXZ'; // 关键：防止万向节死锁
 
-            // 4. 灯光
-            const ambient = new THREE.AmbientLight(0xffffff, 1.2);
-            scene.add(ambient);
-            const dirLight = new THREE.DirectionalLight(0xffeedd, 1.0);
-            dirLight.position.set(30, 80, 50);
-            dirLight.castShadow = true;
-            dirLight.shadow.mapSize.set(2048, 2048);
-            scene.add(dirLight);
+            // 5. 灯光 (确保够亮)
+            const amb = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(amb);
+            const dir = new THREE.DirectionalLight(0xaaddff, 0.8);
+            dir.position.set(20, 50, 20);
+            dir.castShadow = true;
+            scene.add(dir);
 
-            // 5. 控制与UI
-            if (!isMobile) controls = new PointerLockControls(camera, document.body);
-            
+            // 6. 控制器
+            if (!isMobile) {
+                controls = new PointerLockControls(camera, document.body);
+            }
+
+            // 7. 启动逻辑
             const btn = document.getElementById('start-btn');
             const overlay = document.getElementById('overlay');
             btn.addEventListener('click', async () => {
                 overlay.style.opacity = 0;
                 setTimeout(() => overlay.style.display = 'none', 500);
-                await initAudio();
-                startLoop();
-                setInterval(triggerTrain, 20000);
+                
+                await initAudio(); // 启动音频
+                
                 if (!isMobile) controls.lock();
-                else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+                
+                // 启动列车循环
+                triggerTrain();
+                setInterval(triggerTrain, 15000);
             });
 
-            if(!isMobile) controls.addEventListener('unlock', () => {
-                overlay.style.display = 'flex'; overlay.style.opacity = 1;
-            });
+            if (!isMobile) {
+                controls.addEventListener('unlock', () => {
+                    overlay.style.display = 'flex';
+                    overlay.style.opacity = 1;
+                    btn.innerText = "继续 (RESUME)";
+                });
+            }
 
-            setupInputs();
+            // 8. 构建世界
             buildWorld();
-            spawnProps(); // 生成踢罐子
-            spawnToken(); // 生成记忆体
+            setupInputs();
 
             window.addEventListener('resize', onResize);
         }
 
-        // --- 道具系统：易拉罐与纸箱 ---
-        function spawnProps() {
-            const geoms = [
-                new THREE.CylinderGeometry(0.1, 0.1, 0.3, 16), // 易拉罐
-                new THREE.BoxGeometry(0.4, 0.4, 0.4)           // 纸箱
-            ];
-            const mats = [
-                new THREE.MeshStandardMaterial({color: 0xff4400, metalness: 0.8, roughness: 0.2}),
-                new THREE.MeshStandardMaterial({color: 0xccaa88, roughness: 0.9})
-            ];
-
-            for(let i=0; i<15; i++) {
-                const type = Math.random() > 0.5 ? 0 : 1;
-                const mesh = new THREE.Mesh(geoms[type], mats[type]);
-                
-                // 随机分布在站台
-                mesh.position.set(2 + Math.random()*16, 0.5, (Math.random()-0.5)*100);
-                mesh.rotation.set(Math.random(), Math.random(), Math.random());
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
-                
-                scene.add(mesh);
-                
-                // 物理属性
-                gameState.props.push({
-                    mesh: mesh,
-                    velocity: new THREE.Vector3(0,0,0),
-                    radius: type===0 ? 0.2 : 0.5,
-                    isResting: true
-                });
-            }
-        }
-
-        function updateProps(dt) {
-            const playerPos = camera.position;
-            const kickDist = 1.0;
-
-            gameState.props.forEach(prop => {
-                // 1. 玩家踢击检测
-                const dist = prop.mesh.position.distanceTo(playerPos);
-                
-                // 只有脚下高度才会被踢
-                if (dist < kickDist && Math.abs(prop.mesh.position.y - playerPos.y) < 1.5) {
-                    // 计算踢的方向：从玩家指向物体
-                    const kickDir = new THREE.Vector3().subVectors(prop.mesh.position, playerPos).normalize();
-                    kickDir.y = 0.5; // 稍微向上踢
-                    
-                    // 施加力 (当前玩家速度越快，踢得越远)
-                    const speed = Math.sqrt(velocity.x**2 + velocity.z**2);
-                    const force = CONFIG.kickForce + speed; 
-                    
-                    prop.velocity.copy(kickDir.multiplyScalar(force * dt));
-                    prop.isResting = false;
-                    
-                    // 踢击音效
-                    playKickSound();
-                }
-
-                // 2. 物理模拟 (简单的欧拉积分)
-                if (!prop.isResting) {
-                    // 重力
-                    prop.velocity.y -= CONFIG.gravity * dt;
-                    
-                    // 位移
-                    prop.mesh.position.add(prop.velocity.clone().multiplyScalar(dt));
-                    
-                    // 旋转 (模拟滚动)
-                    prop.mesh.rotation.x += prop.velocity.z * dt;
-                    prop.mesh.rotation.z -= prop.velocity.x * dt;
-
-                    // 地面碰撞
-                    const groundY = prop.mesh.position.x > 0 ? 0.2 : -2.8; // 站台 vs 轨道
-                    if (prop.mesh.position.y < groundY) {
-                        prop.mesh.position.y = groundY;
-                        prop.velocity.y *= -0.5; // 弹跳反弹
-                        prop.velocity.x *= 0.8;  // 摩擦力
-                        prop.velocity.z *= 0.8;
-                        
-                        // 停止阈值
-                        if (Math.abs(prop.velocity.y) < 0.5 && Math.abs(prop.velocity.x) < 0.1) {
-                            prop.isResting = true;
-                        }
-                    }
-                    
-                    // 掉出边界重置
-                    if (prop.mesh.position.y < -50) {
-                        prop.mesh.position.set(10, 5, 0);
-                        prop.velocity.set(0,0,0);
-                    }
-                }
-            });
-        }
-
-        // --- 收集要素：记忆体 ---
-        function spawnToken() {
-            const geo = new THREE.IcosahedronGeometry(0.3, 0);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-            const token = new THREE.Mesh(geo, mat);
-            
-            // 内部发光体
-            const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 0), new THREE.MeshBasicMaterial({color: 0xffcccc}));
-            token.add(core);
-
-            // 随机位置 (避开出生点)
-            const zPos = (Math.random() > 0.5 ? 1 : -1) * (20 + Math.random() * 50);
-            token.position.set(5, 1.5, zPos);
-            
-            // 提示光柱
-            const light = new THREE.PointLight(0xff0000, 2, 5);
-            token.add(light);
-            
-            scene.add(token);
-            gameState.tokenObj = token;
-        }
-
-        function updateToken(time) {
-            if (!gameState.tokenObj) return;
-            // 旋转浮动动画
-            gameState.tokenObj.rotation.y = time * 0.002;
-            gameState.tokenObj.rotation.z = time * 0.001;
-            gameState.tokenObj.position.y = 1.5 + Math.sin(time * 0.003) * 0.2;
-        }
-
-        // --- 交互系统 ---
-        function checkInteractions() {
-            const ray = new THREE.Raycaster();
-            ray.setFromCamera(new THREE.Vector2(0,0), camera);
-            const hits = ray.intersectObjects(scene.children, true);
-            const msgEl = document.getElementById('interaction-msg');
-            
-            if (hits.length > 0 && hits[0].distance < 3.5) {
-                // 向上寻找可交互对象的根节点
-                let obj = hits[0].object;
-                while(obj.parent && obj.parent !== scene) obj = obj.parent;
-
-                if (obj === gameState.tokenObj) {
-                    msgEl.innerText = isMobile ? "点击拾取记忆体" : "按 [E] 拾取记忆体";
-                    msgEl.style.opacity = 1;
-                    return { type: 'token', obj: obj };
-                } else if (obj.name === 'vending_machine') {
-                    if (gameState.hasToken) {
-                         msgEl.innerText = isMobile ? "点击插入记忆体" : "按 [E] 插入记忆体";
-                    } else {
-                         msgEl.innerText = "缺少记忆体 / INSERT MEMORY";
-                    }
-                    msgEl.style.opacity = 1;
-                    return { type: 'vm' };
-                }
-            }
-            msgEl.style.opacity = 0;
-            return null;
-        }
-
-        function handleInteraction() {
-            const target = checkInteractions();
-            if (!target) return;
-
-            if (target.type === 'token') {
-                // 拾取
-                scene.remove(gameState.tokenObj);
-                gameState.tokenObj = null;
-                gameState.hasToken = true;
-                
-                // UI 更新
-                document.getElementById('slot-1').classList.add('has-item');
-                document.getElementById('inv-text').innerText = "已获取：损坏的记忆数据";
-                document.getElementById('inv-text').style.color = "#f55";
-                
-                playPickSound();
-                startArpeggio(); // 开启音乐
-
-            } else if (target.type === 'vm') {
-                if (gameState.hasToken) {
-                    activateGlitchMode();
-                } else {
-                    playErrorSound();
-                }
-            }
-        }
-
-        // --- 里世界模式 (Glitch Mode) ---
-        function activateGlitchMode() {
-            if (gameState.glitchMode) return;
-            gameState.glitchMode = true;
-            
-            // 1. 视觉巨变
-            scene.fog.color.setHex(0x550000); // 红雾
-            scene.fog.density = 0.04;
-            scene.background = new THREE.Color(0x220000);
-            
-            // 2. 移除记忆体UI
-            document.getElementById('slot-1').classList.remove('has-item');
-            document.getElementById('inv-text').innerText = "警告：现实稳定锚已失效";
-            
-            // 3. 重力改变
-            CONFIG.gravity = 5.0; // 月球重力
-            
-            // 4. 生成浮空几何体
-            const geo = new THREE.TetrahedronGeometry(10);
-            const mat = new THREE.MeshBasicMaterial({color:0x000000, wireframe:true});
-            for(let i=0; i<20; i++) {
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.position.set((Math.random()-0.5)*100, 20 + Math.random()*50, (Math.random()-0.5)*200);
-                scene.add(mesh);
-                // 简单的自转动画脚本
-                mesh.userData = { rotSpeed: Math.random()*0.02 };
-                gameState.props.push({mesh:mesh, velocity:new THREE.Vector3(0,0,0), isResting:true, isSky:true});
-            }
-            
-            playGlitchExplosion();
-            // 立即召唤慢速幽灵车
-            triggerTrain(true);
-        }
-
-        // --- 场景构建 ---
+        // --- 场景构建 (纯几何体，无纹理，加载快) ---
         function buildWorld() {
-            const matFloor = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.8 });
-            const matWall = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.5 });
+            const matFloor = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
+            const matWall = new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 0.5 });
+            const matTrack = new THREE.MeshStandardMaterial({ color: 0x111111 });
 
-            // 站台
-            const f = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 300), matFloor);
-            f.position.set(10, -0.5, 0); f.receiveShadow = true; scene.add(f);
-            
-            // 轨道
-            const t = new THREE.Mesh(new THREE.BoxGeometry(30, 1, 300), new THREE.MeshStandardMaterial({color:0x111}));
-            t.position.set(-15, -3.5, 0); scene.add(t);
+            // 1. 站台 (x: 0~20)
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 300), matFloor);
+            floor.position.set(10, -0.5, 0);
+            floor.receiveShadow = true;
+            scene.add(floor);
 
-            // 墙壁 & 碰撞
-            const w = new THREE.Mesh(new THREE.BoxGeometry(2, 20, 300), matWall);
-            w.position.set(21, 10, 0); w.castShadow = true; scene.add(w);
-            colliders.push(new THREE.Box3().setFromObject(w));
+            // 2. 轨道 (x: -20~0)
+            const track = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 300), matTrack);
+            track.position.set(-10, -3.5, 0);
+            scene.add(track);
 
-            // 边界
-            colliders.push(new THREE.Box3(new THREE.Vector3(-100,-100,-150), new THREE.Vector3(100,100,-152)));
-            colliders.push(new THREE.Box3(new THREE.Vector3(-100,-100,150), new THREE.Vector3(100,100,152)));
-            colliders.push(new THREE.Box3(new THREE.Vector3(-40,-100,-200), new THREE.Vector3(-30,100,200)));
+            // 3. 后墙
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(2, 20, 300), matWall);
+            wall.position.set(21, 10, 0);
+            scene.add(wall);
 
-            // 柱子
-            const cGeo = new THREE.BoxGeometry(1.5, 12, 1.5);
-            for(let z=-100; z<=100; z+=25) {
-                const c = new THREE.Mesh(cGeo, matWall);
-                c.position.set(5, 6, z); c.castShadow=true; scene.add(c);
-                colliders.push(new THREE.Box3().setFromObject(c));
-                const l = new THREE.PointLight(0xaaddff, 1, 15);
-                l.position.set(5, 8, z); scene.add(l);
+            // 4. 柱子
+            const colGeo = new THREE.BoxGeometry(1.5, 12, 1.5);
+            for(let z=-80; z<=80; z+=20) {
+                const c = new THREE.Mesh(colGeo, matWall);
+                c.position.set(5, 6, z);
+                c.castShadow = true;
+                scene.add(c);
+                // 添加柱子碰撞
+                const box = new THREE.Box3().setFromObject(c);
+                colliders.push(box);
+                
+                // 灯
+                const l = new THREE.PointLight(0xccddff, 0.8, 15);
+                l.position.set(5, 8, z);
+                scene.add(l);
             }
 
-            // 售货机
+            // 5. 售货机 (可交互)
             const vm = new THREE.Group();
-            const vb = new THREE.Mesh(new THREE.BoxGeometry(2,4,2), new THREE.MeshStandardMaterial({color:0x333}));
-            vb.position.y=2; vm.add(vb);
-            const vs = new THREE.Mesh(new THREE.PlaneGeometry(1.5,1), new THREE.MeshBasicMaterial({color:0x00ff00}));
-            vs.position.set(0,2.5,-1.01); vs.rotation.y=Math.PI; vm.add(vs);
-            vmLight = new THREE.PointLight(0x00ff00, 1, 3); vmLight.position.set(0,2.5,-1.5); vm.add(vmLight);
-            vm.position.set(18, 0, 10); vm.name='vending_machine'; scene.add(vm);
-            colliders.push(new THREE.Box3(new THREE.Vector3(16.5,0,8.5), new THREE.Vector3(19.5,5,11.5)));
+            const vmBody = new THREE.Mesh(new THREE.BoxGeometry(2,4,2), new THREE.MeshStandardMaterial({color:0x222}));
+            vmBody.position.y = 2;
+            vm.add(vmBody);
+            const vmScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.5,1), new THREE.MeshBasicMaterial({color:0x00ff00}));
+            vmScreen.position.set(0,2.5,-1.01); vmScreen.rotation.y = Math.PI;
+            vm.add(vmScreen);
+            
+            vm.position.set(18, 0, 10);
+            vm.name = "vending_machine"; // 标记名字用于交互
+            scene.add(vm);
 
-            // 列车
+            // 售货机碰撞
+            const vmBox = new THREE.Box3().setFromObject(vm);
+            colliders.push(vmBox);
+
+            // 6. 边界空气墙 (死死挡住)
+            // 后方
+            colliders.push(new THREE.Box3(new THREE.Vector3(20, -10, -200), new THREE.Vector3(22, 50, 200)));
+            // 前方 (轨道深处)
+            colliders.push(new THREE.Box3(new THREE.Vector3(-50, -10, -200), new THREE.Vector3(-15, 50, 200)));
+            // 左边界
+            colliders.push(new THREE.Box3(new THREE.Vector3(-50, -10, -150), new THREE.Vector3(50, 50, -152)));
+            // 右边界
+            colliders.push(new THREE.Box3(new THREE.Vector3(-50, -10, 150), new THREE.Vector3(50, 50, 152)));
+
+            // 7. 列车
             trainGroup = new THREE.Group();
-            trainBody = new THREE.Mesh(new THREE.BoxGeometry(4.2,4.5,80), new THREE.MeshStandardMaterial({color:0x888, metalness:0.8}));
-            trainBody.position.y=2.25; trainGroup.add(trainBody);
-            const tl = new THREE.SpotLight(0xffffff,100,150);
-            tl.position.set(0,2,41); tl.target.position.set(0,0,100);
-            trainGroup.add(tl); trainGroup.add(tl.target);
-            trainGroup.position.set(-6, -3, -400); scene.add(trainGroup);
+            const tBody = new THREE.Mesh(new THREE.BoxGeometry(4.2, 4.5, 80), new THREE.MeshStandardMaterial({color:0xcccccc}));
+            tBody.position.y = 2.25;
+            trainGroup.add(tBody);
+            const tLight = new THREE.SpotLight(0xffffff, 50, 100);
+            tLight.position.set(0,2,41); tLight.target.position.set(0,0,100);
+            trainGroup.add(tLight); trainGroup.add(tLight.target);
+            
+            trainGroup.position.set(-6, -3, -400);
+            scene.add(trainGroup);
         }
 
-        // --- 物理与控制 ---
+        // --- 输入系统 ---
         function setupInputs() {
+            // PC
             document.addEventListener('keydown', e => {
-                if(e.code==='KeyW') input.y=1;
-                if(e.code==='KeyS') input.y=-1;
-                if(e.code==='KeyA') input.x=-1;
-                if(e.code==='KeyD') input.x=1;
-                if(e.code==='ShiftLeft') input.run=true;
-                if(e.code==='Space' && canJump) velocity.y = CONFIG.gravity * 0.4; // 调整跳跃
-                if(e.code==='KeyE') handleInteraction();
+                if(e.code==='KeyW') input.y = 1;
+                if(e.code==='KeyS') input.y = -1;
+                if(e.code==='KeyA') input.x = -1;
+                if(e.code==='KeyD') input.x = 1;
+                if(e.code==='ShiftLeft') input.run = true;
+                if(e.code==='KeyE') tryInteract();
             });
             document.addEventListener('keyup', e => {
-                if(e.code==='KeyW'||e.code==='KeyS') input.y=0;
-                if(e.code==='KeyA'||e.code==='KeyD') input.x=0;
-                if(e.code==='ShiftLeft') input.run=false;
+                if(e.code==='KeyW'||e.code==='KeyS') input.y = 0;
+                if(e.code==='KeyA'||e.code==='KeyD') input.x = 0;
+                if(e.code==='ShiftLeft') input.run = false;
             });
-            
+            document.addEventListener('mousedown', tryInteract); // 鼠标左键也可交互
+
+            // Mobile Joysticks
             if(isMobile) {
-                setupJoystick('stick-left', 'knob-l', (x,y)=> { input.x=x; input.y=-y; });
-                setupJoystick('stick-right', 'knob-r', (x,y)=> { touchLook.x=x*2; touchLook.y=y*2; });
-                document.addEventListener('touchstart', (e)=>{
-                    if(e.target.id==='canvas-container') handleInteraction();
-                }, {passive:false});
-            }
-        }
-        
-        function setupJoystick(zid, kid, cb) {
-            const z = document.getElementById(zid), k = document.getElementById(kid);
-            z.addEventListener('touchmove', e => {
-                e.preventDefault();
-                const t = e.changedTouches[0];
-                const rect = z.getBoundingClientRect();
-                let dx = t.clientX - (rect.left+rect.width/2), dy = t.clientY - (rect.top+rect.height/2);
-                const d = Math.sqrt(dx*dx+dy*dy), max = rect.width/2-25;
-                if(d>max) { dx*=max/d; dy*=max/d; }
-                k.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-                cb(dx/max, dy/max);
-            });
-            z.addEventListener('touchend', e => {
-                e.preventDefault();
-                k.style.transform = `translate(-50%, -50%)`; cb(0,0);
-            });
-        }
-
-        function updatePhysics(dt) {
-            velocity.x -= velocity.x * 10 * dt;
-            velocity.z -= velocity.z * 10 * dt;
-            velocity.y -= CONFIG.gravity * dt;
-
-            const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y=0; fwd.normalize();
-            const right = new THREE.Vector3().crossVectors(fwd, camera.up).normalize();
-            const speed = input.run ? CONFIG.runSpeed : CONFIG.walkSpeed;
-
-            if(input.y) { velocity.x += fwd.x*speed*input.y*dt*10; velocity.z += fwd.z*speed*input.y*dt*10; }
-            if(input.x) { velocity.x += right.x*speed*input.x*dt*10; velocity.z += right.z*speed*input.x*dt*10; }
-
-            if(isMobile && (touchLook.x||touchLook.y)) {
-                camera.rotation.y -= touchLook.x * dt;
-                camera.rotation.x -= touchLook.y * dt;
-            }
-
-            function move(axis, val) {
-                camera.position[axis]+=val;
-                if(checkCol()) { camera.position[axis]-=val; velocity[axis]=0; }
-            }
-            move('x', velocity.x*dt);
-            move('z', velocity.z*dt);
-            camera.position.y += velocity.y*dt;
-
-            const ground = camera.position.x>0 ? 0 : -3;
-            if(camera.position.y < ground + CONFIG.height) {
-                camera.position.y = ground + CONFIG.height;
-                velocity.y = 0; canJump = true;
-            } else canJump = false;
-
-            if(camera.position.y < -50) { camera.position.set(10,2,0); velocity.set(0,0,0); }
-
-            // 列车撞飞
-            if(trainActive) {
-                const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(1,2,1));
-                trainBox.setFromObject(trainBody);
-                if(trainBox.intersectsBox(pBox)) {
-                    velocity.y = 20; velocity.x = 50; velocity.z = 10;
-                    playKickSound(); // Reuse sound
-                }
-            }
-        }
-
-        function checkCol() {
-            const b = new THREE.Box3();
-            const r = CONFIG.radius;
-            b.min.set(camera.position.x-r, camera.position.y-1.5, camera.position.z-r);
-            b.max.set(camera.position.x+r, camera.position.y+0.2, camera.position.z+r);
-            for(let c of colliders) if(c.intersectsBox(b)) return true;
-            return false;
-        }
-
-        // --- 逻辑循环 ---
-        function triggerTrain(slowMode = false) {
-            if(trainActive) return;
-            trainActive = true; trainTimer = 0;
-            // 里世界：车变红，变慢
-            if (slowMode || gameState.glitchMode) {
-                trainBody.material.color.setHex(0xff0000);
-            }
-            playTrainSound(gameState.glitchMode);
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const time = performance.now();
-            const dt = Math.min((time - lastTime)/1000, 0.1);
-            lastTime = time;
-
-            checkInteractions(); // 每帧检测UI提示
-            updatePhysics(dt);
-            updateProps(dt);
-            updateToken(time);
-
-            // 里世界天空物体旋转
-            if (gameState.glitchMode) {
-                gameState.props.forEach(p => {
-                    if (p.isSky) {
-                        p.mesh.rotation.x += p.mesh.userData.rotSpeed;
-                        p.mesh.rotation.y += p.mesh.userData.rotSpeed;
-                    }
+                // 左摇杆：移动
+                setupJoystick('stick-l', 'knob-l', (x, y) => {
+                    input.x = x; input.y = -y; // 摇杆向上是y负，对应前进
+                });
+                // 右摇杆：视角
+                setupJoystick('stick-r', 'knob-r', (x, y) => {
+                    touchLook.x = x * 2.0; // 灵敏度
+                    touchLook.y = y * 2.0;
+                });
+                // 交互按钮
+                const actBtn = document.getElementById('action-btn');
+                actBtn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    tryInteract();
+                    actBtn.style.background = "rgba(0, 255, 255, 0.6)";
+                });
+                actBtn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    actBtn.style.background = "rgba(0, 255, 255, 0.3)";
                 });
             }
-
-            if(trainActive) {
-                trainTimer += dt;
-                const dur = gameState.glitchMode ? 12.0 : 6.0; // 里世界车很慢
-                if(trainTimer < dur) trainGroup.position.z = -300 + 600*(trainTimer/dur);
-                else { trainActive = false; trainGroup.position.z = -400; }
-            }
-
-            renderer.render(scene, camera);
         }
 
-        function onResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        // --- 音乐合成器 (Web Audio API) ---
-        async function initAudio() {
-            const AC = window.AudioContext || window.webkitAudioContext;
-            audioCtx = new AC();
-            if(audioCtx.state === 'suspended') await audioCtx.resume();
-            
-            masterGain = audioCtx.createGain();
-            masterGain.gain.value = 0.5;
-            masterGain.connect(audioCtx.destination);
-
-            musicGain = audioCtx.createGain();
-            musicGain.gain.value = 0; // 初始静音，捡到道具才响
-            musicGain.connect(masterGain);
-        }
-
-        function startLoop() {
-            // 背景底噪
-            const osc = audioCtx.createOscillator();
-            osc.frequency.value = 40;
-            const g = audioCtx.createGain();
-            g.gain.value = 0.05;
-            osc.connect(g).connect(masterGain);
-            osc.start();
-        }
-
-        function startArpeggio() {
-            // 简单的琶音序列
-            musicGain.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 2);
-            
-            let noteIdx = 0;
-            const notes = [220, 261.6, 329.6, 392, 440, 392, 329.6, 261.6]; // Am7
-            
-            if (sequencerInterval) clearInterval(sequencerInterval);
-            sequencerInterval = setInterval(() => {
-                const t = audioCtx.currentTime;
-                const osc = audioCtx.createOscillator();
-                osc.type = 'triangle';
-                osc.frequency.value = notes[noteIdx % notes.length] * (gameState.glitchMode ? 0.5 : 1); // 里世界降八度
-                
-                const env = audioCtx.createGain();
-                env.gain.setValueAtTime(0, t);
-                env.gain.linearRampToValueAtTime(0.1, t + 0.05);
-                env.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-                
-                // 简单的 Delay 效果
-                const delay = audioCtx.createDelay();
-                delay.delayTime.value = 0.3;
-                const fb = audioCtx.createGain();
-                fb.gain.value = 0.4;
-                
-                osc.connect(env);
-                env.connect(masterGain);
-                env.connect(delay);
-                delay.connect(fb);
-                fb.connect(delay);
-                delay.connect(masterGain);
-                
-                osc.start(); osc.stop(t+1);
-                noteIdx++;
-            }, 200);
-        }
-
-        function playKickSound() {
-            if(!audioCtx) return;
-            const t = audioCtx.currentTime;
-            const osc = audioCtx.createOscillator();
-            osc.frequency.setValueAtTime(150, t);
-            osc.frequency.exponentialRampToValueAtTime(40, t+0.1);
-            const g = audioCtx.createGain();
-            g.gain.setValueAtTime(0.3, t);
-            g.gain.exponentialRampToValueAtTime(0.01, t+0.1);
-            osc.connect(g).connect(masterGain);
-            osc.start(); osc.stop(t+0.1);
-        }
-
-        function playPickSound() {
-            if(!audioCtx) return;
-            const t = audioCtx.currentTime;
-            const osc = audioCtx.createOscillator();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(440, t);
-            osc.frequency.linearRampToValueAtTime(880, t+0.1);
-            const g = audioCtx.createGain();
-            g.gain.setValueAtTime(0.1, t);
-            g.gain.linearRampToValueAtTime(0, t+0.3);
-            osc.connect(g).connect(masterGain);
-            osc.start(); osc.stop(t+0.3);
-        }
-        
-        function playErrorSound() {
-            const t = audioCtx.currentTime;
-            const osc = audioCtx.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.value = 150;
-            const g = audioCtx.createGain();
-            g.gain.setValueAtTime(0.2, t);
-            g.gain.exponentialRampToValueAtTime(0.01, t+0.2);
-            osc.connect(g).connect(masterGain);
-            osc.start(); osc.stop(t+0.2);
-        }
-
-        function playGlitchExplosion() {
-            const t = audioCtx.currentTime;
-            const osc = audioCtx.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(50, t);
-            osc.frequency.linearRampToValueAtTime(20, t+2);
-            const g = audioCtx.createGain();
-            g.gain.value = 1.0;
-            g.gain.linearRampToValueAtTime(0, t+3);
-            osc.connect(g).connect(masterGain);
-            osc.start(); osc.stop(t+3);
-        }
-
-        function playTrainSound(isSlow) {
-            const t = audioCtx.currentTime;
-            const dur = isSlow ? 12 : 6;
-            const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*dur, audioCtx.sampleRate);
-            const d = buf.getChannelData(0);
-            for(let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
-            const src = audioCtx.createBufferSource();
-            src.buffer = buf;
-            const f = audioCtx.createBiquadFilter();
-            f.type = 'lowpass';
-            f.frequency.setValueAtTime(200, t);
-            f.frequency.linearRampToValueAtTime(isSlow?400:1500, t+dur/2);
-            f.frequency.linearRampToValueAtTime(200, t+dur);
-            const g = audioCtx.createGain();
-            g.gain.setValueAtTime(0, t);
-            g.gain.linearRampToValueAtTime(1, t+dur/2);
-            g.gain.linearRampToValueAtTime(0, t+dur);
-            const p = audioCtx.createPanner();
-            p.positionX.value = -6;
-            p.positionZ.setValueAtTime(-200, t);
-            p.positionZ.linearRampToValueAtTime(200, t+dur);
-            src.connect(f).connect(g).connect(p).connect(masterGain);
-            src.start();
-        }
-    </script>
-</body>
-</html>
+        function setupJoystick(areaId, knobId, callback) {
+            const area = document.getElementById(areaId);
+            const knob = document.getElementById(knobId);
+            const rect = area.getBoundingClientRect();
+            const center = { x: rect.
