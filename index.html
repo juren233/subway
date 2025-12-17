@@ -2,108 +2,86 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>深夜地铁站 | 高清重制版</title>
+    <title>深夜地铁站 | 物理碰撞版</title>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            background-color: #000; 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            user-select: none; 
-        }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; user-select: none; }
+        canvas { width: 100%; height: 100%; display: block; }
         
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            /* 移除像素化滤镜，使用平滑渲染 */
-        }
-
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            background: rgba(10, 10, 15, 0.95);
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             color: #fff; z-index: 100;
         }
-
-        h1 {
-            font-size: 3rem; margin-bottom: 10px;
-            text-shadow: 0 0 20px rgba(100, 200, 255, 0.5);
-        }
-
         #start-btn {
-            padding: 15px 60px; 
-            border: none; border-radius: 4px;
-            background: #fff; color: #1a1a2e;
-            font-size: 1.2rem; font-weight: bold;
-            cursor: pointer; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            transition: transform 0.1s;
+            padding: 15px 50px; border: 2px solid #4af; background: transparent;
+            color: #4af; font-size: 1.2rem; cursor: pointer; transition: 0.2s;
+            text-transform: uppercase; letter-spacing: 2px;
         }
-        #start-btn:active { transform: scale(0.95); }
+        #start-btn:hover { background: #4af; color: #000; box-shadow: 0 0 20px #4af; }
 
-        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #ui { position: absolute; bottom: 20px; left: 20px; pointer-events: none; color: rgba(255,255,255,0.6); }
+        .key { display: inline-block; border: 1px solid #777; padding: 2px 6px; border-radius: 4px; margin: 0 2px; color: #fff; background: rgba(0,0,0,0.5); }
         
-        #crosshair { 
-            position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; 
-            background: rgba(255, 255, 255, 0.9); border-radius: 50%; 
-            transform: translate(-50%, -50%); 
-            box-shadow: 0 0 4px #fff;
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
+            background: rgba(255, 255, 255, 0.8); border-radius: 50%; transform: translate(-50%, -50%);
         }
-        
-        #tips {
-            position: absolute; bottom: 30px; left: 30px; 
-            color: rgba(255,255,255,0.7); font-size: 1rem;
-            background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 8px;
-        }
-        .key { color: #fff; font-weight: bold; border: 1px solid #aaa; padding: 0 6px; border-radius: 4px; margin: 0 2px; }
     </style>
 </head>
 <body>
-
     <div id="overlay">
-        <h1>SUBWAY STATION</h1>
-        <p style="margin-bottom: 40px; color: #aab;">高清模式 • 声音合成 • 实体列车</p>
-        <button id="start-btn">点击开始体验</button>
+        <h1 style="text-shadow: 0 0 15px #4af;">V3.0: PHYSICS UPDATE</h1>
+        <p>已启用碰撞体积 • 重力系统 • 实体列车</p>
+        <br>
+        <button id="start-btn">INITIALIZE</button>
     </div>
 
+    <div id="crosshair"></div>
     <div id="ui">
-        <div id="crosshair"></div>
-        <div id="tips">
-            <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> 移动 
-            <span class="key">SHIFT</span> 按住疾跑 
-            <span class="key">鼠标</span> 环顾
-        </div>
+        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> 移动 
+        <span class="key">SPACE</span> 跳跃 
+        <span class="key">SHIFT</span> 疾跑
     </div>
 
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
     </script>
 
     <script type="module">
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-        // --- 参数配置 ---
-        const TRAIN_INTERVAL = 15000; // 缩短等待时间：15秒一班车
-        const RUN_FOV = 100;
-        const NORMAL_FOV = 75;
+        // --- 物理配置 ---
+        const PHYSICS = {
+            gravity: 30.0,
+            jumpForce: 12.0,
+            speed: 15.0,
+            runSpeed: 35.0,
+            playerHeight: 1.7,
+            playerRadius: 0.5,
+            groundY: 0,       // 站台高度
+            trackY: -3.0      // 轨道高度
+        };
 
-        // --- 全局变量 ---
+        // 全局变量
         let camera, scene, renderer, controls;
-        let moveF = false, moveB = false, moveL = false, moveR = false, isRunning = false;
+        let moveF=false, moveB=false, moveL=false, moveR=false, isRunning=false;
+        let canJump = false;
+        
+        // 物理状态
+        const velocity = new THREE.Vector3(); // 玩家速度 (x, y, z)
+        const playerPos = new THREE.Vector3(); // 玩家位置缓存
         let prevTime = performance.now();
-        const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
+
+        // 碰撞体列表
+        const colliders = []; // 存放墙壁 Box3
+        const pillars = [];   // 存放柱子 {x, z, radius}
 
         // 场景对象
         let trainGroup;
-        let trainMoving = false;
+        let trainBox = new THREE.Box3(); // 列车的实时包围盒
+        let trainActive = false;
         let trainStartTime = 0;
         
         // 音频
@@ -113,315 +91,316 @@
         animate();
 
         function init() {
-            // 1. 场景颜色调亮
+            // 1. 场景
             scene = new THREE.Scene();
-            // 深蓝色背景，不再是死黑
-            scene.background = new THREE.Color(0x1a1a2e); 
-            // 雾气改淡，让视野更远
-            scene.fog = new THREE.FogExp2(0x1a1a2e, 0.012); 
+            scene.background = new THREE.Color(0x111115);
+            scene.fog = new THREE.FogExp2(0x111115, 0.015);
 
             // 2. 相机
-            camera = new THREE.PerspectiveCamera(NORMAL_FOV, window.innerWidth / window.innerHeight, 0.1, 500);
-            camera.position.set(0, 1.7, 10);
-
-            // 3. 渲染器 (高清设置)
-            // 开启抗锯齿(antialias: true)，开启高精度深度缓冲
-            renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
-            renderer.setPixelRatio(window.devicePixelRatio); // 使用屏幕原生像素比，拒绝模糊
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 500);
+            
+            // 3. 渲染器 (抗锯齿+物理光照)
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            // 开启阴影贴图
+            renderer.setPixelRatio(window.devicePixelRatio);
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             document.body.appendChild(renderer.domElement);
 
-            // 4. 灯光系统 (大幅增强)
-            setupLighting();
+            // 4. 灯光
+            const ambient = new THREE.AmbientLight(0x555566, 1.0); // 提高环境光，防止死黑
+            scene.add(ambient);
+            
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            dirLight.position.set(20, 50, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.top = 50;
+            dirLight.shadow.camera.bottom = -50;
+            dirLight.shadow.camera.left = -50;
+            dirLight.shadow.camera.right = 50;
+            scene.add(dirLight);
 
-            // 5. 控制器
+            // 5. 控制与交互
             controls = new PointerLockControls(camera, document.body);
-            const startBtn = document.getElementById('start-btn');
             const overlay = document.getElementById('overlay');
+            const btn = document.getElementById('start-btn');
+            
+            // 初始位置 (站台上)
+            camera.position.set(10, PHYSICS.groundY + PHYSICS.playerHeight, 0);
 
-            startBtn.addEventListener('click', async () => {
+            btn.addEventListener('click', async () => {
                 overlay.style.display = 'none';
                 controls.lock();
                 await initAudio();
-                startBackgroundNoise();
-                // 立即安排一班车，不用等太久
-                setTimeout(spawnTrain, 3000); 
-                scheduleTrain();
+                startAmbience();
+                setTimeout(spawnTrain, 5000); // 5秒后第一班车
+                setInterval(spawnTrain, 20000); // 20秒循环
             });
 
             controls.addEventListener('unlock', () => {
                 overlay.style.display = 'flex';
-                startBtn.innerText = "回到游戏";
+                btn.innerText = "RESUME";
             });
-            scene.add(controls.getObject());
 
-            // 6. 交互
-            document.addEventListener('keydown', (e) => onKey(e, true));
-            document.addEventListener('keyup', (e) => onKey(e, false));
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
 
-            // 7. 构建场景
-            buildStation();
+            // 6. 构建物理世界
+            buildWorld();
             
-            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('resize', onResize);
         }
 
-        function setupLighting() {
-            // 环境光：基础亮度，保证阴影处可见
-            const ambient = new THREE.AmbientLight(0x404050, 1.5); 
-            scene.add(ambient);
+        // --- 构建世界与碰撞体 ---
+        function buildWorld() {
+            // 材质
+            const matFloor = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+            const matWall = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9 });
+            const matTrack = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1.0 });
 
-            // 方向光：模拟月光/远处的城市光
-            const dirLight = new THREE.DirectionalLight(0xaaccff, 0.5);
-            dirLight.position.set(50, 50, 50);
-            scene.add(dirLight);
-        }
+            // 1. 站台地面 (Platform)
+            // 视觉网格
+            const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(30, 1, 300), matFloor);
+            floorMesh.position.set(15, -0.5, 0); // 中心在 x=15, y=-0.5 (表面y=0)
+            floorMesh.receiveShadow = true;
+            scene.add(floorMesh);
+            
+            // 2. 轨道区域 (Track) - 视觉
+            const trackMesh = new THREE.Mesh(new THREE.PlaneGeometry(50, 300), matTrack);
+            trackMesh.rotation.x = -Math.PI/2;
+            trackMesh.position.set(-25, PHYSICS.trackY, 0);
+            scene.add(trackMesh);
+            
+            // 3. 墙壁 (Back Wall)
+            const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 40, 300), matWall);
+            wallMesh.position.set(30, 20, 0);
+            wallMesh.castShadow = true;
+            scene.add(wallMesh);
+            // 物理墙壁：添加 Box3 到 colliders
+            colliders.push(new THREE.Box3(
+                new THREE.Vector3(29.5, -10, -150), // Min
+                new THREE.Vector3(31.5, 50, 150)    // Max
+            ));
 
-        function onKey(e, isDown) {
-            switch(e.code) {
-                case 'ArrowUp': case 'KeyW': moveF = isDown; break;
-                case 'ArrowDown': case 'KeyS': moveB = isDown; break;
-                case 'ArrowLeft': case 'KeyA': moveL = isDown; break;
-                case 'ArrowRight': case 'KeyD': moveR = isDown; break;
-                case 'ShiftLeft': case 'ShiftRight': isRunning = isDown; break;
+            // 4. 边界墙 (前后隐形墙)
+            colliders.push(new THREE.Box3(new THREE.Vector3(-50, -10, -151), new THREE.Vector3(50, 50, -150))); // Front
+            colliders.push(new THREE.Box3(new THREE.Vector3(-50, -10, 150), new THREE.Vector3(50, 50, 151)));   // Back
+            // 左侧隐形墙 (防止跑太远)
+            colliders.push(new THREE.Box3(new THREE.Vector3(-40, -10, -150), new THREE.Vector3(-39, 50, 150)));
+
+            // 5. 柱子 (Pillars)
+            const colGeo = new THREE.CylinderGeometry(1.2, 1.2, 10, 16);
+            for(let z=-100; z<=100; z+=25) {
+                const col = new THREE.Mesh(colGeo, matWall);
+                col.position.set(8, 5, z);
+                col.castShadow = true;
+                scene.add(col);
+                
+                // 灯光
+                const light = new THREE.PointLight(0xaaddff, 1.5, 15);
+                light.position.set(8, 9, z);
+                scene.add(light);
+                
+                // 物理柱子数据
+                pillars.push({ x: 8, z: z, radius: 1.2 });
             }
-        }
 
-        // --- 场景构建 ---
-        function buildStation() {
-            // 材质：更亮，反光度更高
-            const floorMat = new THREE.MeshStandardMaterial({ 
-                color: 0x555566, // 亮灰色水泥
-                roughness: 0.4, 
-                metalness: 0.2 
-            });
-            const wallMat = new THREE.MeshStandardMaterial({ 
-                color: 0x888899, // 浅灰墙壁
-                roughness: 0.8 
-            });
-            const yellowLineMat = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
-
-            // 1. 站台地面
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(50, 300), floorMat);
-            floor.rotation.x = -Math.PI / 2;
-            floor.position.set(15, 0, 0);
-            floor.receiveShadow = true;
-            scene.add(floor);
-
-            // 2. 黄色警戒线 (很亮)
-            const line = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 300), yellowLineMat);
-            line.rotation.x = -Math.PI / 2;
-            line.position.set(-8, 0.01, 0);
+            // 6. 黄线/站台边缘 (Platform Edge)
+            // 这是一个特殊的逻辑：如果我们在站台上，不能穿过边缘掉下去，除非跳下去。
+            // 为了简化，我们把 x=0 设为站台边缘。
+            // x < 0 是轨道区， x > 0 是站台区。
+            const line = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 300), new THREE.MeshBasicMaterial({color: 0xffcc00}));
+            line.rotation.x = -Math.PI/2;
+            line.position.set(0.5, 0.01, 0);
             scene.add(line);
 
-            // 3. 轨道区域 (不再死黑)
-            const trackBed = new THREE.Mesh(new THREE.PlaneGeometry(40, 300), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-            trackBed.rotation.x = -Math.PI / 2;
-            trackBed.position.set(-25, -2, 0);
-            scene.add(trackBed);
-            
-            // 铁轨
-            const railGeo = new THREE.BoxGeometry(0.2, 0.2, 300);
-            const railMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8 });
-            const rail1 = new THREE.Mesh(railGeo, railMat); rail1.position.set(-15, -1.8, 0);
-            const rail2 = new THREE.Mesh(railGeo, railMat); rail2.position.set(-20, -1.8, 0);
-            scene.add(rail1); scene.add(rail2);
-
-            // 4. 对面墙壁
-            const farWall = new THREE.Mesh(new THREE.PlaneGeometry(300, 30), wallMat);
-            farWall.rotation.y = Math.PI / 2;
-            farWall.position.set(-30, 10, 0);
-            farWall.receiveShadow = true;
-            scene.add(farWall);
-
-            // 5. 天花板
-            const ceil = new THREE.Mesh(new THREE.PlaneGeometry(100, 300), wallMat);
-            ceil.rotation.x = Math.PI / 2;
-            ceil.position.set(0, 12, 0);
-            scene.add(ceil);
-
-            // 6. 柱子与高亮灯光
-            const colGeo = new THREE.CylinderGeometry(1, 1, 12, 16);
-            for(let z = -100; z <= 100; z += 25) {
-                // 柱子
-                const col = new THREE.Mesh(colGeo, wallMat);
-                col.position.set(8, 6, z);
-                col.castShadow = true;
-                col.receiveShadow = true;
-                scene.add(col);
-
-                // 荧光灯模型
-                const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-                bulb.position.set(8, 11, z);
-                scene.add(bulb);
-
-                // 真实光源 (PointLight) - 增加范围和亮度
-                const light = new THREE.PointLight(0xddeeff, 2, 40); // 强度2, 范围40米
-                light.position.set(8, 10, z);
-                light.castShadow = true;
-                scene.add(light);
-            }
-
-            // --- 实体列车组 ---
+            // 7. 实体列车 (初始化)
             createTrain();
         }
 
         function createTrain() {
             trainGroup = new THREE.Group();
             
-            // 车体
+            // 车身
             const body = new THREE.Mesh(
-                new THREE.BoxGeometry(4, 4.5, 60),
-                new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.7, roughness: 0.2 }) // 银色金属车身
+                new THREE.BoxGeometry(4.5, 5, 80),
+                new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.6, roughness: 0.4 })
             );
-            body.position.y = 2.25;
+            body.position.y = 2.5; // 轨道y=-3, 车高5 -> 中心y=-0.5 (相对于场景0点其实是 trackY + 2.5)
+            // 修正：车应该在轨道上
+            // 轨道y = -3. 车高5. 底部在-3. 中心在 -3 + 2.5 = -0.5.
             trainGroup.add(body);
-
-            // 车窗光条
-            const windows = new THREE.Mesh(
-                new THREE.BoxGeometry(4.1, 1, 55),
-                new THREE.MeshBasicMaterial({ color: 0xaaffff }) // 亮青色车窗
-            );
-            windows.position.y = 2.8;
-            trainGroup.add(windows);
-
-            // 强力车头灯 (SpotLight)
-            const headLight = new THREE.SpotLight(0xffffff, 200);
-            headLight.angle = 0.6;
-            headLight.penumbra = 0.5;
-            headLight.distance = 200;
-            headLight.position.set(0, 3, 30);
+            
+            // 车灯
+            const headLight = new THREE.SpotLight(0xffffff, 50, 100, 0.5);
+            headLight.position.set(0, 0, 41);
             headLight.target.position.set(0, 0, 100);
             trainGroup.add(headLight);
             trainGroup.add(headLight.target);
-            
-            // 车头灯光晕 (Sprite)
-            const spriteMat = new THREE.SpriteMaterial({ 
-                color: 0xffffff, 
-                transparent: true, 
-                opacity: 0.8,
-                blending: THREE.AdditiveBlending
-            });
-            const flare = new THREE.Sprite(spriteMat);
-            flare.scale.set(4, 4, 1);
-            flare.position.set(0, 3, 30.5);
-            trainGroup.add(flare);
 
-            trainGroup.position.set(-17.5, -2, -400); // 隐藏在远处
+            trainGroup.position.set(-6, PHYSICS.trackY, -500); // 初始隐藏
             scene.add(trainGroup);
         }
 
-        // --- 音频逻辑 (纯代码合成) ---
-        async function initAudio() {
-            const AC = window.AudioContext || window.webkitAudioContext;
-            audioCtx = new AC();
-            if(audioCtx.state === 'suspended') await audioCtx.resume();
+        // --- 物理核心逻辑 ---
+        function updatePhysics(delta) {
+            // 1. 获取输入方向
+            const speed = isRunning ? PHYSICS.runSpeed : PHYSICS.speed;
+            velocity.x -= velocity.x * 10.0 * delta; // 阻尼
+            velocity.z -= velocity.z * 10.0 * delta;
             
-            masterGain = audioCtx.createGain();
-            masterGain.gain.value = 0.5;
-            masterGain.connect(audioCtx.destination);
+            // 模拟重力: v = v0 + at
+            velocity.y -= PHYSICS.gravity * delta;
+
+            direction.z = Number(moveF) - Number(moveB);
+            direction.x = Number(moveR) - Number(moveL);
+            direction.normalize();
+
+            if (moveF || moveB) velocity.z -= direction.z * speed * delta;
+            if (moveL || moveR) velocity.x -= direction.x * speed * delta;
+
+            // 2. 预测下一帧位置 (X / Z 轴) - 分轴处理以实现滑动
+            // 这里我们手动计算位移，而不是直接用 controls.move
+            
+            // 获取当前相机朝向 (只取水平分量)
+            const forward = new THREE.Vector3();
+            const right = new THREE.Vector3();
+            // 提取 PointerLockControls 的方向
+            const camDir = new THREE.Vector3();
+            camera.getWorldDirection(camDir);
+            forward.set(camDir.x, 0, camDir.z).normalize();
+            right.crossVectors(camera.up, forward).normalize(); // 左手定则修正? Threejs通常是右手
+
+            // 计算位移向量
+            // 注意：PointerLockControls 内部逻辑是 Right/Forward。
+            // 我们手动实现移动逻辑，脱离 controls 的自动移动，只用它做鼠标视角。
+            const dX = - (right.x * velocity.x + forward.x * velocity.z) * delta;
+            const dZ = - (right.z * velocity.x + forward.z * velocity.z) * delta;
+            const dY = velocity.y * delta;
+
+            const oldPos = camera.position.clone();
+            const newPos = oldPos.clone();
+
+            // --- 碰撞检测 X ---
+            newPos.x += dX;
+            if (checkCollision(newPos)) {
+                newPos.x = oldPos.x; // 撞墙了，撤销 X 移动
+                velocity.x = 0;
+            }
+
+            // --- 碰撞检测 Z ---
+            newPos.z += dZ;
+            if (checkCollision(newPos)) {
+                newPos.z = oldPos.z; // 撞墙了，撤销 Z 移动
+                velocity.z = 0;
+            }
+
+            // --- 碰撞检测 Y (地面/重力) ---
+            newPos.y += dY;
+            
+            // 地面高度判定
+            // 如果在站台范围 (x > 0)，地面高度是 0
+            // 如果在轨道范围 (x <= 0)，地面高度是 trackY (-3)
+            let currentGround = (newPos.x > 0) ? PHYSICS.groundY : PHYSICS.trackY;
+            
+            // 简单的边缘检测：如果你在站台边缘 (x near 0) 且高度低于站台但高于轨道
+            // 这里我们允许跳下去，但不允许穿模回来。
+            // 为简单起见，仅做高度吸附：
+            if (newPos.y < currentGround + PHYSICS.playerHeight) {
+                newPos.y = currentGround + PHYSICS.playerHeight;
+                velocity.y = 0;
+                canJump = true;
+            }
+
+            // --- 列车碰撞 (击飞) ---
+            if (trainActive) {
+                // 更新列车包围盒 (稍微缩小一点比视觉小，更宽容)
+                trainBox.setFromObject(trainGroup);
+                // 玩家包围球 (位置，半径)
+                // 简单点：检测点是否在 Box 内
+                const playerFoot = newPos.clone();
+                playerFoot.y -= 1.0; // 检测脚部
+                if (trainBox.containsPoint(playerFoot)) {
+                    // 被撞飞!
+                    velocity.set(30, 20, 0); // 向右上方飞出
+                    playSound('hit');
+                }
+            }
+
+            // 应用最终位置
+            camera.position.copy(newPos);
         }
 
-        function startBackgroundNoise() {
-            // 产生低沉的空洞风声
-            const bufferSize = audioCtx.sampleRate * 2;
-            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-            const data = buffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        // 碰撞检测函数 (返回 true 表示有碰撞)
+        function checkCollision(pos) {
+            // 1. 墙壁碰撞 (AABB)
+            const playerBox = new THREE.Box3();
+            const r = PHYSICS.playerRadius;
+            // 创建玩家的 AABB (脚部位置)
+            playerBox.min.set(pos.x - r, pos.y - 1.7, pos.z - r);
+            playerBox.max.set(pos.x + r, pos.y, pos.z + r);
 
-            const noise = audioCtx.createBufferSource();
-            noise.buffer = buffer;
-            noise.loop = true;
+            for (let wall of colliders) {
+                if (playerBox.intersectsBox(wall)) return true;
+            }
 
-            const filter = audioCtx.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.value = 400; // 只要低频
+            // 2. 柱子碰撞 (圆柱距离检测)
+            for (let p of pillars) {
+                const dx = pos.x - p.x;
+                const dz = pos.z - p.z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
+                if (dist < (p.radius + r)) return true;
+            }
 
-            const gain = audioCtx.createGain();
-            gain.gain.value = 0.05;
-
-            noise.connect(filter).connect(gain).connect(masterGain);
-            noise.start();
-        }
-
-        function playTrainSound(duration) {
-            const t = audioCtx.currentTime;
-            
-            // 振荡器模拟电机声
-            const osc = audioCtx.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(50, t);
-            osc.frequency.exponentialRampToValueAtTime(100, t + duration/2); // 进站音调升高
-            
-            // 噪音模拟风声
-            const bufferSize = audioCtx.sampleRate * duration;
-            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-            const data = buffer.getChannelData(0);
-            for(let i=0; i<bufferSize; i++) data[i] = Math.random() * 2 - 1;
-            const noise = audioCtx.createBufferSource();
-            noise.buffer = buffer;
-
-            // 滤波器扫频 (多普勒感)
-            const filter = audioCtx.createBiquadFilter();
-            filter.type = 'bandpass';
-            filter.frequency.setValueAtTime(100, t);
-            filter.frequency.exponentialRampToValueAtTime(2000, t + duration/2);
-            filter.frequency.exponentialRampToValueAtTime(100, t + duration);
-
-            // 3D 声像 (Panner)
-            const panner = audioCtx.createPanner();
-            panner.panningModel = 'HRTF';
-            panner.positionX.value = -10;
-            panner.positionY.value = 0;
-            panner.positionZ.setValueAtTime(-200, t);
-            panner.positionZ.linearRampToValueAtTime(200, t + duration);
-
-            const gain = audioCtx.createGain();
-            gain.gain.setValueAtTime(0, t);
-            gain.gain.linearRampToValueAtTime(1.0, t + duration/2);
-            gain.gain.linearRampToValueAtTime(0, t + duration);
-
-            // 连接图
-            osc.connect(gain);
-            noise.connect(filter).connect(gain);
-            gain.connect(panner).connect(masterGain);
-
-            osc.start();
-            noise.start();
-            osc.stop(t + duration);
+            return false;
         }
 
         // --- 逻辑循环 ---
-
-        function scheduleTrain() {
-            setTimeout(() => {
-                spawnTrain();
-                scheduleTrain();
-            }, TRAIN_INTERVAL);
+        function onKeyDown(e) {
+            switch(e.code) {
+                case 'KeyW': moveF = true; break;
+                case 'KeyS': moveB = true; break;
+                case 'KeyA': moveL = true; break;
+                case 'KeyD': moveR = true; break;
+                case 'ShiftLeft': isRunning = true; break;
+                case 'Space': 
+                    if(canJump) {
+                        velocity.y = PHYSICS.jumpForce;
+                        canJump = false;
+                    }
+                    break;
+            }
+        }
+        function onKeyUp(e) {
+            switch(e.code) {
+                case 'KeyW': moveF = false; break;
+                case 'KeyS': moveB = false; break;
+                case 'KeyA': moveL = false; break;
+                case 'KeyD': moveR = false; break;
+                case 'ShiftLeft': isRunning = false; break;
+            }
         }
 
+        // --- 游戏循环 ---
         function spawnTrain() {
-            if(trainMoving) return;
-            trainMoving = true;
+            if(trainActive) return;
+            trainActive = true;
             trainStartTime = performance.now();
-            playTrainSound(8); // 8秒的声音
+            playSound('train');
         }
 
-        function updateTrain(time) {
-            if(!trainMoving) return;
-            const duration = 8000; 
-            const elapsed = time - trainStartTime;
-            const progress = elapsed / duration;
+        function updateTrain(t) {
+            if(!trainActive) return;
+            const duration = 6000; // 6秒通过
+            const elapsed = t - trainStartTime;
+            const pct = elapsed / duration;
 
-            if (progress < 1.3) {
-                // 实体列车移动: 从 z=-300 到 z=300
-                const z = -300 + (600 * progress);
-                trainGroup.position.z = z;
+            if (pct < 1.5) {
+                // 列车从 z=-250 跑到 z=250
+                trainGroup.position.z = -250 + (500 * pct);
             } else {
-                trainMoving = false;
-                trainGroup.position.z = -400; // 重置
+                trainActive = false;
+                trainGroup.position.z = -500;
             }
         }
 
@@ -433,40 +412,79 @@
             prevTime = time;
 
             if (controls.isLocked) {
-                // 物理模拟
-                velocity.x -= velocity.x * 10.0 * delta;
-                velocity.z -= velocity.z * 10.0 * delta;
-                direction.z = Number(moveF) - Number(moveB);
-                direction.x = Number(moveR) - Number(moveL);
-                direction.normalize();
-
-                const speed = isRunning ? 100.0 : 40.0;
-                if (moveF || moveB) velocity.z -= direction.z * speed * delta;
-                if (moveL || moveR) velocity.x -= direction.x * speed * delta;
-
-                controls.moveRight(-velocity.x * delta);
-                controls.moveForward(-velocity.z * delta);
-
-                // 疾跑时视角拉伸 (FOV 变化)
-                const targetFOV = isRunning && (direction.length() > 0) ? RUN_FOV : NORMAL_FOV;
-                const lerpSpeed = delta * 5;
-                camera.fov += (targetFOV - camera.fov) * lerpSpeed;
-                camera.updateProjectionMatrix();
-
-                // 简单的头部晃动
-                if (direction.length() > 0) {
-                    camera.position.y = 1.7 + Math.sin(time * (isRunning ? 0.015 : 0.01)) * 0.1;
-                }
+                updatePhysics(delta);
             }
-
+            
             updateTrain(time);
             renderer.render(scene, camera);
         }
 
-        function onWindowResize() {
+        function onResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- 音频系统 ---
+        async function initAudio() {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AC();
+            if(audioCtx.state==='suspended') await audioCtx.resume();
+            masterGain = audioCtx.createGain();
+            masterGain.gain.value = 0.5;
+            masterGain.connect(audioCtx.destination);
+        }
+
+        function startAmbience() {
+            // 低频背景音
+            const osc = audioCtx.createOscillator();
+            osc.frequency.value = 60;
+            const g = audioCtx.createGain();
+            g.gain.value = 0.05;
+            const f = audioCtx.createBiquadFilter();
+            f.type = 'lowpass'; f.frequency.value = 200;
+            osc.connect(f).connect(g).connect(masterGain);
+            osc.start();
+        }
+
+        function playSound(type) {
+            if(!audioCtx) return;
+            const t = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            if (type === 'hit') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(100, t);
+                osc.frequency.exponentialRampToValueAtTime(0.01, t+0.5);
+                gain.gain.setValueAtTime(0.5, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t+0.5);
+                osc.connect(gain).connect(masterGain);
+                osc.start(); osc.stop(t+0.5);
+            } else if (type === 'train') {
+                // 简易列车噪音 (粉红噪)
+                const bSize = audioCtx.sampleRate * 6;
+                const buf = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate);
+                const d = buf.getChannelData(0);
+                for(let i=0;i<bSize;i++) d[i] = (Math.random()*2-1) * 0.5;
+                const node = audioCtx.createBufferSource();
+                node.buffer = buf;
+                
+                const f = audioCtx.createBiquadFilter();
+                f.type = 'bandpass';
+                f.frequency.setValueAtTime(100, t);
+                f.frequency.linearRampToValueAtTime(1000, t+3); // 进站音调升高
+                f.frequency.linearRampToValueAtTime(100, t+6);
+                
+                const panner = audioCtx.createPanner();
+                panner.panningModel = 'HRTF';
+                panner.positionX.value = -6;
+                panner.positionZ.setValueAtTime(-200, t);
+                panner.positionZ.linearRampToValueAtTime(200, t+6);
+                
+                node.connect(f).connect(panner).connect(masterGain);
+                node.start();
+            }
         }
     </script>
 </body>
